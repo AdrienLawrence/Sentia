@@ -8,23 +8,44 @@ datasource db {
 }
 
 model User {
-  id         String    @id @default(uuid()) @db.Uuid
-  email      String?   @unique
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  notebooks  Notebook[]
-  pages      Page[]
+  id          String      @id @default(uuid()) @db.Uuid
+  email       String?     @unique
+  created_at  DateTime    @default(now()) @db.Timestamptz(6)
+  notebooks   Notebook[]
+  pages       Page[]
+  feedback    Feedback[]
+  page_chunks PageChunk[]
 
   @@map("users")
 }
 
+model Feedback {
+  id              String   @id @default(uuid()) @db.Uuid
+  user_id         String   @db.Uuid
+  category        String   @db.VarChar(24)
+  message         String   @db.VarChar(2000)
+  rating          Int?
+  contact_allowed Boolean  @default(false)
+  context         Json?
+  status          String   @default("submitted") @db.VarChar(24)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@index([status, created_at])
+  @@map("feedback")
+}
+
 model Notebook {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String  
-  style       String   @default("blank") // "blank", "composition", "grid"
-  user_id     String   @db.Uuid
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  pages       Page[]
+  id             String      @id @default(uuid()) @db.Uuid
+  name           String
+  style          String      @default("blank") // "blank", "composition", "grid"
+  user_id        String      @db.Uuid
+  created_at     DateTime    @default(now()) @db.Timestamptz(6)
+  last_opened_at DateTime?   @db.Timestamptz(6)
+  user           User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  pages          Page[]
+  page_chunks    PageChunk[]
 
   @@map("notebooks")
 }
@@ -33,44 +54,74 @@ model Page {
   id          String    @id @default(uuid()) @db.Uuid
   title       String?
   page_number Int       @default(1)
-  content     Json?     // ← Tiptap JSON document with all text + formatting
+  content     Json? // ← Tiptap JSON document with all text + formatting
   user_id     String    @db.Uuid
   notebook_id String?   @db.Uuid
   created_at  DateTime  @default(now()) @db.Timestamptz(6)
   updated_at  DateTime? @updatedAt @db.Timestamptz(6)
-  
+
   // Drawing system
   draw_boxes  DrawBox[]
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  notebook    Notebook? @relation(fields: [notebook_id], references: [id], onDelete: Cascade)
+  page_chunks PageChunk[]
+  user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  notebook    Notebook?   @relation(fields: [notebook_id], references: [id], onDelete: Cascade)
 
   @@map("pages")
 }
 
+model PageChunk {
+  id           String                      @id @default(uuid()) @db.Uuid
+  user_id      String                      @db.Uuid
+  notebook_id  String                      @db.Uuid
+  page_id      String                      @db.Uuid
+  chunk_index  Int
+  content      String                      @db.Text
+  content_hash String                      @db.Char(64)
+  embedding    Unsupported("vector(1536)")
+  created_at   DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime                    @updatedAt @db.Timestamptz(6)
+  user         User                        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  notebook     Notebook                    @relation(fields: [notebook_id], references: [id], onDelete: Cascade)
+  page         Page                        @relation(fields: [page_id], references: [id], onDelete: Cascade)
+
+  @@unique([page_id, chunk_index])
+  @@index([user_id, notebook_id])
+  @@index([page_id])
+  @@map("page_chunks")
+}
+
 model DrawBox {
-  id          String   @id @default(uuid()) @db.Uuid
-  page_id     String   @db.Uuid
-  x_position  Int      // Position on page
-  y_position  Int
-  width       Int
-  height      Int
-  created_at  DateTime @default(now())
-  
+  id         String   @id @default(uuid()) @db.Uuid
+  page_id    String   @db.Uuid
+  x_position Int // Position on page
+  y_position Int
+  width      Int
+  height     Int
+  created_at DateTime @default(now())
+
   // Elements inside this draw box
-  elements    DrawElement[]
-  page        Page     @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  elements DrawElement[]
+  page     Page          @relation(fields: [page_id], references: [id], onDelete: Cascade)
 }
 
 model DrawElement {
   id          String   @id @default(uuid()) @db.Uuid
   draw_box_id String   @db.Uuid
-  type        String   // "rectangle", "circle", "arrow", "line", "text"
-  x           Int      // Position within draw box
+  type        String // "rectangle", "circle", "arrow", "line", "text"
+  x           Int // Position within draw box
   y           Int
   width       Int
   height      Int
-  properties  Json     // {color: "#ff0000", strokeWidth: 2, text: "Label", fontSize: 14}
+  properties  Json // {color: "#ff0000", strokeWidth: 2, text: "Label", fontSize: 14}
   created_at  DateTime @default(now())
-  
-  draw_box    DrawBox  @relation(fields: [draw_box_id], references: [id], onDelete: Cascade)
+
+  draw_box DrawBox @relation(fields: [draw_box_id], references: [id], onDelete: Cascade)
+}
+
+model ApiRateLimit {
+  key               String   @id @db.VarChar(200)
+  window_started_at DateTime @db.Timestamptz(6)
+  count             Int
+
+  @@map("api_rate_limits")
 }

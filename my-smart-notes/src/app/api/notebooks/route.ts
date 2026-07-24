@@ -1,56 +1,96 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
+import {
+  ApiRequestError,
+  apiErrorResponse,
+  assertAllowedKeys,
+  parseJsonObject,
+  readOptionalEnum,
+  readOptionalLabel,
+  requireAuthenticatedUser,
+  requireSameOrigin
+} from '@/lib/apiSecurity'
 
-// GET /api/notebooks - List notebooks
+const NOTEBOOK_STYLES = [
+  'blank',
+  'standard',
+  'composition',
+  'grid'
+] as const
+
+// GET /api/notebooks - List notebooks for the authenticated user
 export async function GET(request: NextRequest) {
   try {
-    // For now, return all notebooks until we implement proper auth
+    const user = await requireAuthenticatedUser(request)
+
     const notebooks = await prisma.notebook.findMany({
-      take: 4,
-      orderBy: { created_at: 'desc' },
+      where: {
+        user_id: user.id
+      },
+      orderBy: {
+        created_at: 'desc'
+      },
       include: {
-        pages: {
-          take: 1,
-          orderBy: { created_at: 'desc' }
+        _count: {
+          select: {
+            pages: true
+          }
         }
       }
     })
+
     return NextResponse.json(notebooks)
   } catch (error) {
-    console.error('Failed to fetch notebooks:', error)
-    return NextResponse.json({ error: 'Failed to fetch notebooks' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to fetch notebooks')
   }
 }
 
-// POST /api/notebooks - Create new notebook
+// POST /api/notebooks - Create a notebook for the authenticated user
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    
-    // For now, let's get the first user from the database to associate with the notebook
-    const firstUser = await prisma.user.findFirst()
-    
-    if (!firstUser) {
-      return NextResponse.json({ error: 'No users found in database' }, { status: 400 })
+    requireSameOrigin(request)
+    const user = await requireAuthenticatedUser(request)
+    const body = await parseJsonObject(request, 16_384)
+    assertAllowedKeys(body, ['name', 'style'])
+
+    const name =
+      readOptionalLabel(body, 'name', 100) ?? 'My Notebook'
+
+    const style =
+      readOptionalEnum(body, 'style', NOTEBOOK_STYLES) ?? 'blank'
+
+    const notebookCount = await prisma.notebook.count({
+      where: { user_id: user.id }
+    })
+
+    if (notebookCount >= 200) {
+      throw new ApiRequestError('Notebook limit reached', 409)
     }
-    
-    console.log('Using user:', firstUser.id)
-    
-    // Create the notebook with the first user's ID
-    const notebook = await prisma.notebook.create({
-      data: {
-        name: body.name || 'Untitled Notebook',
-        style: body.style || 'blank',
-        user_id: firstUser.id
+
+    await prisma.user.upsert({
+      where: {
+        id: user.id
+      },
+      update: {
+        email: user.email ?? null
+      },
+      create: {
+        id: user.id,
+        email: user.email ?? null
       }
     })
-    
-    console.log('Created notebook:', notebook)
-    return NextResponse.json(notebook)
+
+    const notebook = await prisma.notebook.create({
+      data: {
+        name,
+        style,
+        user_id: user.id
+      }
+    })
+
+    return NextResponse.json(notebook, { status: 201 })
   } catch (error) {
-    console.error('Failed to create notebook:', error)
-    return NextResponse.json({ error: 'Failed to create notebook' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to create notebook')
   }
 }

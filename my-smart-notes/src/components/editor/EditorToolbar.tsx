@@ -1,17 +1,22 @@
 // src/components/editor/EditorToolbar.tsx
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useEditorStore } from './useEditorStore'
-import { ListManager } from './listManager'
 
 interface EditorToolbarProps {
-  editor: any // Tiptap editor instance
+  editor: any
 }
 
-export function EditorToolbar({ editor }: EditorToolbarProps) {
+export function EditorToolbar({
+  editor
+}: EditorToolbarProps) {
+  const savedSelectionRef = useRef<{
+    from: number
+    to: number
+  } | null>(null)
+
   const {
-    // STATE
     isBold,
     isItalic,
     isStrikethrough,
@@ -21,8 +26,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
     alignment,
     fontSize,
     fontFamily,
-    
-    // ACTIONS
+
     setBold,
     setItalic,
     setStrikethrough,
@@ -31,220 +35,344 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
     setTextColor,
     setAlignment,
     setFontSize,
-    setFontFamily,
+    setFontFamily
   } = useEditorStore()
 
-  // Sync store with editor state when editor changes
   useEffect(() => {
-    if (!editor) {
-      console.log('EditorToolbar: No editor instance')
-      return
-    }
-
-    console.log('EditorToolbar: Setting up listeners for editor')
+    if (!editor) return
 
     const updateStoreFromEditor = () => {
       try {
-        // Update ALL formatting states from editor
+        const { from, to } = editor.state.selection
+        savedSelectionRef.current = { from, to }
+
         setBold(editor.isActive('bold'))
         setItalic(editor.isActive('italic'))
-        setStrikethrough(editor.isActive('strike'))
-        
-        // Check for lists using ListManager - USE CORRECT METHOD NAMES
-        const listManager = new ListManager(editor)
-        setBulletList(listManager.isInBulletListAtCursor())  // CORRECTED
-        setOrderedList(listManager.isInNumberedListAtCursor()) // CORRECTED
-        
-        // Text alignment
-        const currentAlign = editor.isActive({ textAlign: 'left' }) ? 'left' :
-                            editor.isActive({ textAlign: 'center' }) ? 'center' :
-                            editor.isActive({ textAlign: 'right' }) ? 'right' : 'justify'
-        setAlignment(currentAlign)
-        
-        // Text color
-        const currentColor = editor.getAttributes('textStyle')?.color
-        if (currentColor) {
-          setTextColor(currentColor)
+        setStrikethrough(
+          editor.isActive('strike')
+        )
+
+        setBulletList(
+          editor.isActive('bulletList')
+        )
+
+        setOrderedList(
+          editor.isActive('orderedList')
+        )
+
+        const currentAlignment =
+          editor.isActive({
+            textAlign: 'center'
+          })
+            ? 'center'
+            : editor.isActive({
+                  textAlign: 'right'
+                })
+              ? 'right'
+              : editor.isActive({
+                    textAlign: 'justify'
+                  })
+                ? 'justify'
+                : 'left'
+
+        setAlignment(currentAlignment)
+
+        const textStyleAttributes =
+          editor.getAttributes('textStyle') || {}
+
+        if (textStyleAttributes.color) {
+          setTextColor(
+            textStyleAttributes.color
+          )
         }
-        
-        // Font size
-        const currentFontSize = editor.getAttributes('textStyle')?.fontSize
-        if (currentFontSize) {
-          setFontSize(currentFontSize)
-        }
-        
-        // Font family
-        const currentFontFamily = editor.getAttributes('textStyle')?.fontFamily
-        if (currentFontFamily) {
-          setFontFamily(currentFontFamily)
-        }
-        
+
+        setFontSize(
+          textStyleAttributes.fontSize || '16px'
+        )
+
+        setFontFamily(
+          !textStyleAttributes.fontFamily ||
+            textStyleAttributes.fontFamily === 'Consolas'
+            ? 'var(--font-roboto-condensed)'
+            : textStyleAttributes.fontFamily
+        )
       } catch (error) {
-        console.error('EditorToolbar: Error updating store from editor:', error)
+        console.error(
+          'EditorToolbar: Failed to synchronize editor state:',
+          error
+        )
       }
     }
 
-    // Listen to editor changes
-    editor.on('transaction', updateStoreFromEditor)
-    editor.on('selectionUpdate', updateStoreFromEditor)
-    
-    console.log('EditorToolbar: Listeners attached')
+    editor.on(
+      'transaction',
+      updateStoreFromEditor
+    )
 
-    // Initial update
+    editor.on(
+      'selectionUpdate',
+      updateStoreFromEditor
+    )
+
     updateStoreFromEditor()
 
     return () => {
-      console.log('EditorToolbar: Cleaning up listeners')
-      editor.off('transaction', updateStoreFromEditor)
-      editor.off('selectionUpdate', updateStoreFromEditor)
-    }
-  }, [editor, setBold, setItalic, setStrikethrough, setBulletList, setOrderedList, setTextColor, setAlignment, setFontSize, setFontFamily])
+      editor.off(
+        'transaction',
+        updateStoreFromEditor
+      )
 
-  // Apply bold formatting when store changes
+      editor.off(
+        'selectionUpdate',
+        updateStoreFromEditor
+      )
+    }
+  }, [
+    editor,
+    setBold,
+    setItalic,
+    setStrikethrough,
+    setBulletList,
+    setOrderedList,
+    setTextColor,
+    setAlignment,
+    setFontSize,
+    setFontFamily
+  ])
+
   useEffect(() => {
     if (!editor) return
-    
-    if (editor.isActive('bold') !== isBold) {
-      try {
-        if (isBold) {
-          editor.chain().focus().setBold().run()
-        } else {
-          editor.chain().focus().unsetBold().run()
-        }
-      } catch (error) {
-        console.error('EditorToolbar: Error applying bold:', error)
+
+    if (
+      editor.isActive('bold') === isBold
+    ) {
+      return
+    }
+
+    try {
+      const chain = editor.chain().focus()
+
+      if (isBold) {
+        chain.setBold().run()
+      } else {
+        chain.unsetBold().run()
       }
+    } catch (error) {
+      console.error(
+        'EditorToolbar: Failed to apply bold:',
+        error
+      )
     }
   }, [editor, isBold])
 
-  // Apply italic formatting
   useEffect(() => {
     if (!editor) return
-    
-    if (editor.isActive('italic') !== isItalic) {
-      try {
-        if (isItalic) {
-          editor.chain().focus().setItalic().run()
-        } else {
-          editor.chain().focus().unsetItalic().run()
-        }
-      } catch (error) {
-        console.error('EditorToolbar: Error applying italic:', error)
+
+    if (
+      editor.isActive('italic') ===
+      isItalic
+    ) {
+      return
+    }
+
+    try {
+      const chain = editor.chain().focus()
+
+      if (isItalic) {
+        chain.setItalic().run()
+      } else {
+        chain.unsetItalic().run()
       }
+    } catch (error) {
+      console.error(
+        'EditorToolbar: Failed to apply italic:',
+        error
+      )
     }
   }, [editor, isItalic])
 
-  // Apply strikethrough formatting
   useEffect(() => {
     if (!editor) return
 
-    if (editor.isActive('strike') !== isStrikethrough) {
-      try {
-        if (isStrikethrough) {
-          editor.chain().focus().setStrike().run()
-        } else {
-          editor.chain().focus().unsetStrike().run()
-        }
-      } catch (error) {
-        console.error('EditorToolbar: Error applying strikethrough:', error)
+    if (
+      editor.isActive('strike') ===
+      isStrikethrough
+    ) {
+      return
+    }
+
+    try {
+      const chain = editor.chain().focus()
+
+      if (isStrikethrough) {
+        chain.setStrike().run()
+      } else {
+        chain.unsetStrike().run()
       }
+    } catch (error) {
+      console.error(
+        'EditorToolbar: Failed to apply strikethrough:',
+        error
+      )
     }
   }, [editor, isStrikethrough])
 
-  // Apply text alignment
   useEffect(() => {
     if (!editor) return
-    
+
     try {
-      if (!editor.isActive({ textAlign: alignment })) {
-        editor.chain().focus().setTextAlign(alignment).run()
+      if (
+        !editor.isActive({
+          textAlign: alignment
+        })
+      ) {
+        editor
+          .chain()
+          .focus()
+          .setTextAlign(alignment)
+          .run()
       }
     } catch (error) {
-      console.error('EditorToolbar: Error applying alignment:', error)
+      console.error(
+        'EditorToolbar: Failed to apply alignment:',
+        error
+      )
     }
   }, [editor, alignment])
 
-  // Apply text color
   useEffect(() => {
     if (!editor) return
-    
+
     try {
-      const currentColor = editor.getAttributes('textStyle')?.color
+      const currentColor =
+        editor.getAttributes(
+          'textStyle'
+        )?.color
+
       if (currentColor !== textColor) {
-        editor.chain().focus().setColor(textColor).run()
+        editor
+          .chain()
+          .focus()
+          .setColor(textColor)
+          .run()
       }
     } catch (error) {
-      console.error('EditorToolbar: Error applying text color:', error)
+      console.error(
+        'EditorToolbar: Failed to apply text color:',
+        error
+      )
     }
   }, [editor, textColor])
 
-  // Apply bullet list using ListManager - USE CORRECT METHOD NAMES
   useEffect(() => {
     if (!editor) return
-    
+
+    const bulletListActive =
+      editor.isActive('bulletList')
+
+    if (
+      bulletListActive === isBulletList
+    ) {
+      return
+    }
+
     try {
-      const listManager = new ListManager(editor)
-      
-      if (isBulletList) {
-        listManager.createBulletList()
-      } else {
-        // Only exit if we're actually in a bullet list - USE CORRECT METHOD NAME
-        if (listManager.isInBulletListAtCursor()) {
-          listManager.exitBulletListAtCursor()  // CORRECTED
-        }
-      }
+      editor
+        .chain()
+        .focus()
+        .toggleBulletList()
+        .run()
     } catch (error) {
-      console.error('EditorToolbar: Error with bullet list:', error)
+      console.error(
+        'EditorToolbar: Failed to toggle bullet list:',
+        error
+      )
     }
   }, [editor, isBulletList])
 
-  // Apply ordered list using ListManager - USE CORRECT METHOD NAMES
   useEffect(() => {
     if (!editor) return
-    
+
+    const orderedListActive =
+      editor.isActive('orderedList')
+
+    if (
+      orderedListActive === isOrderedList
+    ) {
+      return
+    }
+
     try {
-      const listManager = new ListManager(editor)
-      
-      if (isOrderedList) {
-        listManager.createNumberedList()
-      } else {
-        // Only exit if we're actually in a numbered list - USE CORRECT METHOD NAME
-        if (listManager.isInNumberedListAtCursor()) {
-          listManager.exitNumberedListAtCursor()  // CORRECTED
-        }
-      }
+      editor
+        .chain()
+        .focus()
+        .toggleOrderedList()
+        .run()
     } catch (error) {
-      console.error('EditorToolbar: Error with ordered list:', error)
+      console.error(
+        'EditorToolbar: Failed to toggle ordered list:',
+        error
+      )
     }
   }, [editor, isOrderedList])
 
-  // Apply font size
   useEffect(() => {
     if (!editor || !fontSize) return
-    
+
     try {
-      const currentFontSize = editor.getAttributes('textStyle')?.fontSize
-      if (currentFontSize !== fontSize) {
-        // Set font size through textStyle mark
-        editor.chain().focus().setMark('textStyle', { fontSize }).run()
+      const currentFontSize =
+        editor.getAttributes(
+          'textStyle'
+        )?.fontSize
+
+      if (
+        currentFontSize !== fontSize
+      ) {
+        const chain = editor.chain()
+        const savedSelection = savedSelectionRef.current
+
+        if (savedSelection) {
+          chain.setTextSelection(savedSelection)
+        }
+
+        chain
+          .focus()
+          .setFontSize(fontSize)
+          .run()
       }
     } catch (error) {
-      console.error('EditorToolbar: Error applying font size:', error)
+      console.error(
+        'EditorToolbar: Failed to apply font size:',
+        error
+      )
     }
   }, [editor, fontSize])
 
-  // Apply font family
   useEffect(() => {
     if (!editor || !fontFamily) return
-    
+
     try {
-      const currentFontFamily = editor.getAttributes('textStyle')?.fontFamily
-      if (currentFontFamily !== fontFamily) {
-        // Set font family through textStyle mark
-        editor.chain().focus().setMark('textStyle', { fontFamily }).run()
+      const currentFontFamily =
+        editor.getAttributes(
+          'textStyle'
+        )?.fontFamily
+
+      if (
+        currentFontFamily !== fontFamily
+      ) {
+        editor
+          .chain()
+          .focus()
+          .setMark('textStyle', {
+            fontFamily
+          })
+          .run()
       }
     } catch (error) {
-      console.error('EditorToolbar: Error applying font family:', error)
+      console.error(
+        'EditorToolbar: Failed to apply font family:',
+        error
+      )
     }
   }, [editor, fontFamily])
 

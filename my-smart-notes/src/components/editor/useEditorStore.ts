@@ -57,7 +57,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   isBulletList: false,
   isOrderedList: false,
   fontSize: '16px',
-  fontFamily: 'Arial',
+  fontFamily: 'var(--font-roboto-condensed)',
   hasSelection: false,
   canUndo: false,
   canRedo: false,
@@ -87,6 +87,6 @@ export const useEditorStore = create<EditorState>((set) => ({
     isBulletList: false,
     isOrderedList: false,
     fontSize: '16px',
-    fontFamily: 'Arial',
+    fontFamily: 'var(--font-roboto-condensed)',
   }),
 }))

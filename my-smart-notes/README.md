@@ -16,6 +16,32 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## ScribeAI RAG setup
+
+The notebook assistant and study quiz require:
+
+```env
+OPENAI_API_KEY=your_server_side_api_key
+
+# Optional model overrides
+OPENAI_RESPONSE_MODEL=gpt-5.6-terra
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+Keep `OPENAI_API_KEY` server-side and never prefix it with
+`NEXT_PUBLIC_`.
+
+Before using the AI features, apply the Prisma migration that creates
+the `page_chunks` table and enables Supabase's `vector` extension:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+The first AI request indexes notebook pages. Later requests only
+re-embed chunks whose content hash changed.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

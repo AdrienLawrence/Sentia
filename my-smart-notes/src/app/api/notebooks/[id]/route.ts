@@ -1,80 +1,174 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma'
 
-// GET /api/notebooks/[id] - Get single notebook with its pages
+import {
+  apiErrorResponse,
+  assertAllowedKeys,
+  assertUuid,
+  parseJsonObject,
+  readOptionalBoolean,
+  readOptionalEnum,
+  readOptionalLabel,
+  requireAuthenticatedUser,
+  requireSameOrigin
+} from '@/lib/apiSecurity'
+
+const NOTEBOOK_STYLES = [
+  'blank',
+  'standard',
+  'composition',
+  'grid'
+] as const
+
+// GET /api/notebooks/[id] - Get one notebook
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
-    
-    const notebook = await prisma.notebook.findUnique({
-      where: { id },
+    const { id: notebookId } = await params
+    assertUuid(notebookId, 'notebook ID')
+    const user = await requireAuthenticatedUser(request)
+
+    const notebook = await prisma.notebook.findFirst({
+      where: {
+        id: notebookId,
+        user_id: user.id
+      },
       include: {
-        pages: {
-          orderBy: { page_number: 'asc' },
-          include: {
-            draw_boxes: {
-              include: { elements: true }
-            }
+        _count: {
+          select: {
+            pages: true
           }
         }
       }
     })
 
     if (!notebook) {
-      return NextResponse.json({ error: 'Notebook not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Notebook not found' },
+        { status: 404 }
+      )
     }
 
     return NextResponse.json(notebook)
   } catch (error) {
-    console.error('Failed to fetch notebook:', error)
-    return NextResponse.json({ error: 'Failed to fetch notebook' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to fetch notebook')
   }
 }
 
-// PATCH /api/notebooks/[id] - Update notebook (rename, change style)
+// PATCH /api/notebooks/[id] - Update notebook metadata
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
-    const body = await request.json()
+    requireSameOrigin(request)
+    const { id: notebookId } = await params
+    assertUuid(notebookId, 'notebook ID')
+    const user = await requireAuthenticatedUser(request)
+    const body = await parseJsonObject(request, 16_384)
+    assertAllowedKeys(body, ['name', 'style', 'markOpened'])
+
+    const data: {
+      name?: string
+      style?: string
+      last_opened_at?: Date
+    } = {}
+
+    if (body.name !== undefined) {
+      data.name = readOptionalLabel(body, 'name', 100)
+    }
+
+    if (body.style !== undefined) {
+      data.style = readOptionalEnum(
+        body,
+        'style',
+        NOTEBOOK_STYLES
+      )
+    }
+
+    if (readOptionalBoolean(body, 'markOpened')) {
+      data.last_opened_at = new Date()
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields provided' },
+        { status: 400 }
+      )
+    }
+
+    const existingNotebook =
+      await prisma.notebook.findFirst({
+        where: {
+          id: notebookId,
+          user_id: user.id
+        },
+        select: {
+          id: true
+        }
+      })
+
+    if (!existingNotebook) {
+      return NextResponse.json(
+        { error: 'Notebook not found' },
+        { status: 404 }
+      )
+    }
 
     const notebook = await prisma.notebook.update({
-      where: { id },
-      data: {
-        name: body.name,
-        style: body.style
-      }
+      where: {
+        id: notebookId
+      },
+      data
     })
 
     return NextResponse.json(notebook)
   } catch (error) {
-    console.error('Failed to update notebook:', error)
-    return NextResponse.json({ error: 'Failed to update notebook' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to update notebook')
   }
 }
 
-// DELETE /api/notebooks/[id] - Delete notebook and its pages
+// DELETE /api/notebooks/[id] - Delete notebook and all related data
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
+    requireSameOrigin(request)
+    const { id: notebookId } = await params
+    assertUuid(notebookId, 'notebook ID')
+    const user = await requireAuthenticatedUser(request)
 
-    // This will cascade delete all pages due to onDelete: Cascade
-    await prisma.notebook.delete({
-      where: { id }
+    const notebook = await prisma.notebook.findFirst({
+      where: {
+        id: notebookId,
+        user_id: user.id
+      },
+      select: {
+        id: true
+      }
     })
 
-    return NextResponse.json({ message: 'Notebook deleted' })
+    if (!notebook) {
+      return NextResponse.json(
+        { error: 'Notebook not found' },
+        { status: 404 }
+      )
+    }
+
+    await prisma.notebook.delete({
+      where: {
+        id: notebookId
+      }
+    })
+
+    return NextResponse.json(
+      { success: true },
+      { status: 200 }
+    )
   } catch (error) {
-    console.error('Failed to delete notebook:', error)
-    return NextResponse.json({ error: 'Failed to delete notebook' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to delete notebook')
   }
 }

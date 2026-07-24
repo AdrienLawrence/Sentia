@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import {
+  ApiRequestError,
+  apiErrorResponse,
+  assertAllowedKeys,
+  assertUuid,
+  parseJsonObject,
+  readOptionalText,
+  requireAuthenticatedUser,
+  requireSameOrigin,
+  validateTiptapDocument
+} from '@/lib/apiSecurity'
 
 // GET /api/pages/[id] - Get single page with all content
 export async function GET(
@@ -9,9 +20,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    assertUuid(id, 'page ID')
+    const user = await requireAuthenticatedUser(request)
     
-    const page = await prisma.page.findUnique({
-      where: { id },
+    const page = await prisma.page.findFirst({
+      where: {
+        id,
+        user_id: user.id
+      },
       include: {
         notebook: true,  // Include notebook info
         draw_boxes: {
@@ -28,8 +44,7 @@ export async function GET(
 
     return NextResponse.json(page)
   } catch (error) {
-    console.error('Failed to fetch page:', error)
-    return NextResponse.json({ error: 'Failed to fetch page' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to fetch page')
   }
 }
 
@@ -39,22 +54,58 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireSameOrigin(request)
     const { id } = await params
-    const body = await request.json()
+    assertUuid(id, 'page ID')
+    const user = await requireAuthenticatedUser(request)
+
+    const existingPage = await prisma.page.findFirst({
+      where: {
+        id,
+        user_id: user.id
+      },
+      select: { id: true }
+    })
+
+    if (!existingPage) {
+      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
+    }
+
+    const body = await parseJsonObject(request)
+    assertAllowedKeys(body, ['content', 'title'])
+
+    if (
+      body.content === undefined &&
+      body.title === undefined
+    ) {
+      throw new ApiRequestError('No valid fields provided')
+    }
+
+    const title = readOptionalText(
+      body,
+      'title',
+      200,
+      true
+    )
+    const content =
+      body.content === undefined
+        ? undefined
+        : (validateTiptapDocument(
+            body.content
+          ) as Prisma.InputJsonValue)
 
     const page = await prisma.page.update({
       where: { id },
       data: {
-        content: body.content,
-        title: body.title,
+        content,
+        title,
         updated_at: new Date()
       }
     })
 
     return NextResponse.json(page)
   } catch (error) {
-    console.error('Failed to update page:', error)
-    return NextResponse.json({ error: 'Failed to update page' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to update page')
   }
 }
 
@@ -64,7 +115,22 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireSameOrigin(request)
     const { id } = await params
+    assertUuid(id, 'page ID')
+    const user = await requireAuthenticatedUser(request)
+
+    const existingPage = await prisma.page.findFirst({
+      where: {
+        id,
+        user_id: user.id
+      },
+      select: { id: true }
+    })
+
+    if (!existingPage) {
+      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
+    }
 
     await prisma.page.delete({
       where: { id }
@@ -72,7 +138,6 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Page deleted' })
   } catch (error) {
-    console.error('Failed to delete page:', error)
-    return NextResponse.json({ error: 'Failed to delete page' }, { status: 500 })
+    return apiErrorResponse(error, 'Failed to delete page')
   }
 }

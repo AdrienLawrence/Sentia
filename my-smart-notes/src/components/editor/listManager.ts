@@ -1,234 +1,217 @@
 // src/components/editor/listManager.ts
+
 export class ListManager {
   private editor: any
-  
+
   constructor(editor: any) {
     this.editor = editor
   }
-  
-  // Create bullet list
-  createBulletList() {
-    if (!this.editor) return
-    
-    // Check if we're already in a bullet list at cursor position
+
+  // Ensure the current selection is inside a real Tiptap bullet list.
+  createBulletList(): boolean {
+    if (!this.editor) return false
+
     if (this.isInBulletListAtCursor()) {
-      this.exitBulletListAtCursor()
-      return
+      return true
     }
-    
-    // Insert bullet at cursor position
-    this.editor.chain().focus().insertContent('• ').run()
+
+    return this.editor
+      .chain()
+      .focus()
+      .toggleBulletList()
+      .run()
   }
-  
-  // Create numbered list
-  createNumberedList() {
-    if (!this.editor) return
-    
-    // Check if we're already in a numbered list at cursor position
+
+  // Ensure the current selection is inside a real Tiptap ordered list.
+  createNumberedList(): boolean {
+    if (!this.editor) return false
+
     if (this.isInNumberedListAtCursor()) {
-      this.exitNumberedListAtCursor()
-      return
+      return true
     }
-    
-    // Insert "1. " at cursor position
-    this.editor.chain().focus().insertContent('1. ').run()
+
+    return this.editor
+      .chain()
+      .focus()
+      .toggleOrderedList()
+      .run()
   }
-  
-  // Check if cursor is in bullet list by looking at text around cursor
+
+  // Convert shortcuts such as "i. " or "iv. " into a Roman ordered list.
+  handleRomanListShortcut(): boolean {
+    if (!this.editor) return false
+
+    const { $from } = this.editor.state.selection
+
+    if (!$from.parent.isTextblock) return false
+
+    const shortcut = $from.parent.textBetween(
+      0,
+      $from.parentOffset
+    )
+    const match = shortcut.match(/^([ivxlcdm]+)\.$/)
+
+    if (!match) return false
+
+    const start = romanNumeralToNumber(match[1])
+
+    if (start === null) return false
+
+    return this.editor
+      .chain()
+      .focus()
+      .deleteRange({
+        from: $from.start(),
+        to: $from.pos
+      })
+      .toggleOrderedList()
+      .updateAttributes('orderedList', {
+        start,
+        type: 'i'
+      })
+      .run()
+  }
+
+  // Check whether the selection or cursor is inside a bullet-list node.
   isInBulletListAtCursor(): boolean {
     if (!this.editor) return false
-    
-    const { from } = this.editor.state.selection
-    const textBefore = this.getTextBeforeCursor(20) // Look 20 chars before cursor
-    
-    // Check if we have "• " in the text before cursor on the same line
-    const lines = textBefore.split('\n')
-    const currentLine = lines[lines.length - 1]
-    
-    return currentLine.includes('• ')
+
+    return this.editor.isActive('bulletList')
   }
-  
-  // Check if cursor is in numbered list by looking at text around cursor
+
+  // Check whether the selection or cursor is inside an ordered-list node.
   isInNumberedListAtCursor(): boolean {
     if (!this.editor) return false
-    
-    const { from } = this.editor.state.selection
-    const textBefore = this.getTextBeforeCursor(30) // Look 30 chars before cursor
-    
-    // Check if we have "X. " in the text before cursor on the same line
-    const lines = textBefore.split('\n')
-    const currentLine = lines[lines.length - 1]
-    
-    return /\d+\.\s/.test(currentLine)
+
+    return this.editor.isActive('orderedList')
   }
-  
-  // Get text before cursor
-  private getTextBeforeCursor(chars: number): string {
-    if (!this.editor) return ''
-    
-    const { from } = this.editor.state.selection
-    const start = Math.max(0, from - chars)
-    return this.editor.state.doc.textBetween(start, from, '\n')
-  }
-  
-  // Get current line text around cursor
-  private getCurrentLineText(): string {
-    if (!this.editor) return ''
-    
-    const { from } = this.editor.state.selection
-    const doc = this.editor.state.doc
-    
-    // Find line start
-    let lineStart = from
-    while (lineStart > 0 && doc.textBetween(lineStart - 1, lineStart) !== '\n') {
-      lineStart--
+
+  // Convert the active bullet-list item back into a normal paragraph.
+  exitBulletListAtCursor(): boolean {
+    if (!this.editor || !this.isInBulletListAtCursor()) {
+      return false
     }
-    
-    // Find line end
-    let lineEnd = from
-    const docSize = doc.content.size
-    while (lineEnd < docSize && doc.textBetween(lineEnd, lineEnd + 1) !== '\n') {
-      lineEnd++
-    }
-    
-    return doc.textBetween(lineStart, lineEnd)
+
+    return this.editor
+      .chain()
+      .focus()
+      .toggleBulletList()
+      .run()
   }
-  
-  // Exit bullet list at cursor position
-  exitBulletListAtCursor() {
-    if (!this.editor) return
-    
-    const lineText = this.getCurrentLineText()
-    const bulletIndex = lineText.indexOf('• ')
-    
-    if (bulletIndex !== -1) {
-      const { from } = this.editor.state.selection
-      const lineStart = this.findLineStart(from)
-      const deleteFrom = lineStart + bulletIndex
-      const deleteTo = deleteFrom + 2 // "• " is 2 chars
-      
-      this.editor.chain().focus()
-        .setTextSelection(deleteTo)
-        .deleteRange({ from: deleteFrom, to: deleteTo })
-        .run()
+
+  // Convert the active ordered-list item back into a normal paragraph.
+  exitNumberedListAtCursor(): boolean {
+    if (!this.editor || !this.isInNumberedListAtCursor()) {
+      return false
     }
+
+    return this.editor
+      .chain()
+      .focus()
+      .toggleOrderedList()
+      .run()
   }
-  
-  // Exit numbered list at cursor position
-  exitNumberedListAtCursor() {
-    if (!this.editor) return
-    
-    const lineText = this.getCurrentLineText()
-    const match = lineText.match(/(\d+\.\s)/)
-    
-    if (match) {
-      const numberText = match[1]
-      const numberIndex = lineText.indexOf(numberText)
-      
-      const { from } = this.editor.state.selection
-      const lineStart = this.findLineStart(from)
-      const deleteFrom = lineStart + numberIndex
-      const deleteTo = deleteFrom + numberText.length
-      
-      this.editor.chain().focus()
-        .setTextSelection(deleteTo)
-        .deleteRange({ from: deleteFrom, to: deleteTo })
-        .run()
-    }
-  }
-  
-  // Find start of line containing position
-  private findLineStart(position: number): number {
-    if (!this.editor) return position
-    
-    const doc = this.editor.state.doc
-    let lineStart = position
-    
-    while (lineStart > 0 && doc.textBetween(lineStart - 1, lineStart) !== '\n') {
-      lineStart--
-    }
-    
-    return lineStart
-  }
-  
-  // Handle Enter key - check if we should create new list item
+
+  /*
+   * Enter is handled natively by Tiptap.
+   *
+   * Its built-in list behavior creates the next item and exits the list when
+   * Enter is pressed on an empty item. Returning false prevents the custom
+   * key handler from overriding that behavior.
+   */
   shouldHandleEnter(): boolean {
-    if (!this.editor) return false
-    
-    const { from } = this.editor.state.selection
-    const lineText = this.getCurrentLineText()
-    const lineStart = this.findLineStart(from)
-    const isAtLineStart = from === lineStart
-    
-    // Check if we're at line start and line starts with list marker
-    if (isAtLineStart) {
-      return lineText.startsWith('• ') || /^\d+\.\s/.test(lineText)
-    }
-    
     return false
   }
-  
-  // Handle Enter in list - create new list item
+
+  // Retained for compatibility with the existing TiptapEditor key handler.
   handleEnterInList(): boolean {
-    if (!this.editor || !this.shouldHandleEnter()) return false
-    
-    const lineText = this.getCurrentLineText()
-    
-    if (lineText.startsWith('• ')) {
-      // Create new bullet
-      this.editor.chain().focus().insertContent('\n• ').run()
-      return true
-    }
-    
-    const match = lineText.match(/^(\d+)\.\s/)
-    if (match) {
-      const currentNumber = parseInt(match[1])
-      const nextNumber = currentNumber + 1
-      
-      // Create new numbered item
-      this.editor.chain().focus().insertContent(`\n${nextNumber}. `).run()
-      return true
-    }
-    
     return false
   }
-  
-  // Handle Tab key for indentation
+
+  // Nest the current list item one level deeper.
   handleTab(): boolean {
-    if (!this.editor) return false
-    
-    const { from } = this.editor.state.selection
-    const lineStart = this.findLineStart(from)
-    const isAtLineStart = from === lineStart
-    
-    if (isAtLineStart && (this.isInBulletListAtCursor() || this.isInNumberedListAtCursor())) {
-      // Add 2 spaces at line start (indentation)
-      this.editor.chain().focus().insertContent('  ').run()
-      return true
+    if (!this.editor || !this.editor.isActive('listItem')) {
+      return false
     }
-    
-    return false
+
+    return this.editor
+      .chain()
+      .focus()
+      .sinkListItem('listItem')
+      .run()
   }
-  
-  // Handle Shift+Tab for outdentation
+
+  // Move the current list item one level outward.
   handleShiftTab(): boolean {
-    if (!this.editor) return false
-    
-    const { from } = this.editor.state.selection
-    const lineStart = this.findLineStart(from)
-    const lineText = this.getCurrentLineText()
-    
-    // Check if line starts with 2 spaces
-    if (lineText.startsWith('  ')) {
-      this.editor.chain().focus()
-        .deleteRange({ from: lineStart, to: lineStart + 2 })
-        .run()
-      return true
+    if (!this.editor || !this.editor.isActive('listItem')) {
+      return false
     }
-    
-    return false
+
+    return this.editor
+      .chain()
+      .focus()
+      .liftListItem('listItem')
+      .run()
   }
 }
 
-// Export the class
+function romanNumeralToNumber(value: string): number | null {
+  const values: Record<string, number> = {
+    i: 1,
+    v: 5,
+    x: 10,
+    l: 50,
+    c: 100,
+    d: 500,
+    m: 1000
+  }
+  let total = 0
+  let previous = 0
+
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    const current = values[value[index]]
+    total += current < previous ? -current : current
+    previous = current
+  }
+
+  if (
+    total < 1 ||
+    total > 3999 ||
+    numberToRomanNumeral(total) !== value
+  ) {
+    return null
+  }
+
+  return total
+}
+
+function numberToRomanNumeral(value: number): string {
+  const numerals: Array<[number, string]> = [
+    [1000, 'm'],
+    [900, 'cm'],
+    [500, 'd'],
+    [400, 'cd'],
+    [100, 'c'],
+    [90, 'xc'],
+    [50, 'l'],
+    [40, 'xl'],
+    [10, 'x'],
+    [9, 'ix'],
+    [5, 'v'],
+    [4, 'iv'],
+    [1, 'i']
+  ]
+  let remaining = value
+  let result = ''
+
+  for (const [amount, numeral] of numerals) {
+    while (remaining >= amount) {
+      result += numeral
+      remaining -= amount
+    }
+  }
+
+  return result
+}
+
 export default ListManager
