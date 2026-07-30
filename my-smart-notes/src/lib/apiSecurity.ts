@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { createHash } from 'node:crypto'
 
+import {
+  PRIVACY_POLICY_VERSION,
+  TERMS_OF_SERVICE_VERSION
+} from '@/features/legal/constants'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/lib/supabase/server'
 
@@ -13,6 +18,42 @@ const FORBIDDEN_KEYS = new Set([
   'constructor',
   'prototype'
 ])
+const LEGAL_CONSENT_CACHE_TTL_MS = 15 * 60 * 1000
+const PENDING_LEGAL_CONSENT_CACHE_TTL_MS = 30 * 1000
+
+interface SecurityRuntimeState {
+  legalConsent: Map<
+    string,
+    {
+      accepted: boolean
+      expiresAt: number
+    }
+  >
+  legalConsentRequests: Map<string, Promise<boolean>>
+  readRateLimits: Map<
+    string,
+    {
+      count: number
+      windowStartedAt: number
+    }
+  >
+}
+
+const securityRuntimeKey = Symbol.for(
+  'sentia.api-security-runtime'
+)
+const globalForSecurity = globalThis as typeof globalThis & {
+  [securityRuntimeKey]?: SecurityRuntimeState
+}
+const securityRuntime =
+  globalForSecurity[securityRuntimeKey] ??
+  ({
+    legalConsent: new Map(),
+    legalConsentRequests: new Map(),
+    readRateLimits: new Map()
+  } satisfies SecurityRuntimeState)
+
+globalForSecurity[securityRuntimeKey] = securityRuntime
 
 export class ApiRequestError extends Error {
   status: number
@@ -40,23 +81,199 @@ export function isRecord(
   )
 }
 
-export async function requireAuthenticatedUser(request?: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser()
+export async function enforcePublicRecoveryRateLimit(
+  request: Request,
+  normalizedEmail: string
+) {
+  const forwardedFor = request.headers
+    .get('x-forwarded-for')
+    ?.split(',')[0]
+    ?.trim()
+  const clientAddress =
+    request.headers.get('cf-connecting-ip')?.trim() ||
+    request.headers.get('x-real-ip')?.trim() ||
+    forwardedFor ||
+    'unknown'
 
-  if (error || !user) {
+  await Promise.all([
+    consumePublicRateLimit(
+      `public:recovery:client:${hashPublicRateLimitValue(clientAddress)}`,
+      5,
+      3600
+    ),
+    consumePublicRateLimit(
+      `public:recovery:email:${hashPublicRateLimitValue(normalizedEmail)}`,
+      3,
+      3600
+    )
+  ])
+}
+
+async function consumePublicRateLimit(
+  key: string,
+  limit: number,
+  windowSeconds: number
+) {
+  const rows = await prisma.$queryRaw<Array<{ count: number }>>(
+    Prisma.sql`
+      INSERT INTO "api_rate_limits" ("key", "window_started_at", "count")
+      VALUES (${key.slice(0, 200)}, CURRENT_TIMESTAMP, 1)
+      ON CONFLICT ("key") DO UPDATE SET
+        "window_started_at" = CASE
+          WHEN "api_rate_limits"."window_started_at" <= CURRENT_TIMESTAMP - (${windowSeconds} * INTERVAL '1 second')
+            THEN CURRENT_TIMESTAMP
+          ELSE "api_rate_limits"."window_started_at"
+        END,
+        "count" = CASE
+          WHEN "api_rate_limits"."window_started_at" <= CURRENT_TIMESTAMP - (${windowSeconds} * INTERVAL '1 second')
+            THEN 1
+          ELSE LEAST("api_rate_limits"."count" + 1, ${limit + 1})
+        END
+      RETURNING "count"
+    `
+  )
+
+  if ((rows[0]?.count ?? limit + 1) > limit) {
+    console.warn('security.public_recovery_rate_limited')
+    throw new ApiRequestError(
+      'Too many recovery requests. Please try again later.',
+      429,
+      windowSeconds
+    )
+  }
+}
+
+function hashPublicRateLimitValue(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+export async function requireAuthenticatedUser(
+  request?: Request,
+  options: {
+    requireLegalConsent?: boolean
+  } = {}
+) {
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getClaims()
+  const claims = data?.claims
+  const userId =
+    typeof claims?.sub === 'string' ? claims.sub : null
+
+  if (error || !userId || !UUID_PATTERN.test(userId)) {
     console.warn('security.auth_rejected')
     throw new ApiRequestError('Unauthorized', 401)
   }
 
-  if (request) {
-    await enforceRateLimit(request, user.id)
+  const user = {
+    id: userId,
+    email:
+      typeof claims?.email === 'string' ? claims.email : null
   }
 
+  const requestChecks: Array<Promise<void>> = []
+
+  if (request) {
+    requestChecks.push(enforceRateLimit(request, user.id))
+  }
+
+  if (options.requireLegalConsent !== false) {
+    requestChecks.push(requireCurrentLegalConsent(user.id))
+  }
+
+  await Promise.all(requestChecks)
+
   return user
+}
+
+async function requireCurrentLegalConsent(userId: string) {
+  const accepted = await hasCurrentLegalConsent(userId)
+
+  if (!accepted) {
+    console.warn('security.legal_consent_required', { userId })
+    throw new ApiRequestError(
+      'Current Privacy Policy and Terms of Service acceptance is required',
+      451
+    )
+  }
+}
+
+function legalConsentCacheKey(userId: string) {
+  return [
+    userId,
+    PRIVACY_POLICY_VERSION,
+    TERMS_OF_SERVICE_VERSION
+  ].join(':')
+}
+
+export async function hasCurrentLegalConsent(
+  userId: string,
+  options: {
+    forceRefresh?: boolean
+  } = {}
+) {
+  const cacheKey = legalConsentCacheKey(userId)
+  const cached = securityRuntime.legalConsent.get(cacheKey)
+
+  if (
+    !options.forceRefresh &&
+    cached &&
+    cached.expiresAt > Date.now()
+  ) {
+    return cached.accepted
+  }
+
+  const existingRequest =
+    securityRuntime.legalConsentRequests.get(cacheKey)
+  if (existingRequest) return existingRequest
+
+  const request = Promise.resolve(
+    prisma.user.findUnique({
+      where: {
+        id: userId
+      },
+      select: {
+        privacy_policy_version: true,
+        privacy_policy_accepted_at: true,
+        terms_of_service_version: true,
+        terms_of_service_accepted_at: true
+      }
+    })
+  )
+    .then((storedUser) => {
+      const accepted =
+        storedUser?.privacy_policy_version ===
+          PRIVACY_POLICY_VERSION &&
+        storedUser.privacy_policy_accepted_at !== null &&
+        storedUser?.terms_of_service_version ===
+          TERMS_OF_SERVICE_VERSION &&
+        storedUser.terms_of_service_accepted_at !== null
+
+      rememberCurrentLegalConsent(userId, accepted)
+      return accepted
+    })
+    .finally(() => {
+      securityRuntime.legalConsentRequests.delete(cacheKey)
+    })
+
+  securityRuntime.legalConsentRequests.set(cacheKey, request)
+  return request
+}
+
+export function rememberCurrentLegalConsent(
+  userId: string,
+  accepted: boolean
+) {
+  securityRuntime.legalConsent.set(
+    legalConsentCacheKey(userId),
+    {
+      accepted,
+      expiresAt:
+        Date.now() +
+        (accepted
+          ? LEGAL_CONSENT_CACHE_TTL_MS
+          : PENDING_LEGAL_CONSENT_CACHE_TTL_MS)
+    }
+  )
 }
 
 export function requireSameOrigin(request: Request) {
@@ -489,6 +706,11 @@ async function enforceRateLimit(request: Request, userId: string) {
   const { limit, windowSeconds } = getRateLimit(method, route)
   const key = `${userId}:${method}:${route}`.slice(0, 200)
 
+  if (method === 'GET') {
+    enforceReadRateLimit(key, limit, windowSeconds)
+    return
+  }
+
   const rows = await prisma.$queryRaw<Array<{ count: number }>>(
     Prisma.sql`
       INSERT INTO "api_rate_limits" ("key", "window_started_at", "count")
@@ -522,6 +744,61 @@ async function enforceRateLimit(request: Request, userId: string) {
     (route === '/api/ai/ask' || route === '/api/ai/quiz')
   ) {
     await enforceDailyAiLimit(userId, route)
+  }
+}
+
+function enforceReadRateLimit(
+  key: string,
+  limit: number,
+  windowSeconds: number
+) {
+  const now = Date.now()
+  const windowMilliseconds = windowSeconds * 1000
+  const current = securityRuntime.readRateLimits.get(key)
+
+  if (
+    !current ||
+    current.windowStartedAt <= now - windowMilliseconds
+  ) {
+    securityRuntime.readRateLimits.set(key, {
+      count: 1,
+      windowStartedAt: now
+    })
+    return
+  }
+
+  current.count += 1
+
+  if (current.count > limit) {
+    console.warn('security.rate_limited', {
+      method: 'GET',
+      route: key.slice(key.indexOf(':GET:') + 5),
+      userId: key.slice(0, key.indexOf(':GET:'))
+    })
+    throw new ApiRequestError(
+      'Too many requests',
+      429,
+      Math.max(
+        1,
+        Math.ceil(
+          (current.windowStartedAt +
+            windowMilliseconds -
+            now) /
+            1000
+        )
+      )
+    )
+  }
+
+  if (securityRuntime.readRateLimits.size > 5000) {
+    for (const [storedKey, entry] of securityRuntime.readRateLimits) {
+      if (
+        entry.windowStartedAt <=
+        now - windowMilliseconds
+      ) {
+        securityRuntime.readRateLimits.delete(storedKey)
+      }
+    }
   }
 }
 

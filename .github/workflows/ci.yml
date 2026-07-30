@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "my-smart-notes/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "my-smart-notes/**"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: my-smart-notes
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      OPENAI_API_KEY: ci-placeholder
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: my-smart-notes/package-lock.json
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: my-smart-notes/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('my-smart-notes/package-lock.json') }}-${{ hashFiles('my-smart-notes/src/**', 'my-smart-notes/public/**', 'my-smart-notes/next.config.ts') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('my-smart-notes/package-lock.json') }}-
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run validation and tests
+        run: npm run check
+
+      - name: Build production application
+        run: npm run build

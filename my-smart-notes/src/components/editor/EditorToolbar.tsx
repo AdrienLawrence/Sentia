@@ -1,16 +1,18 @@
 // src/components/editor/EditorToolbar.tsx
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/core'
 import { useEditorStore } from './useEditorStore'
 
 interface EditorToolbarProps {
-  editor: any
+  editor: Editor
 }
 
 export function EditorToolbar({
   editor
 }: EditorToolbarProps) {
+  const [isInitialized, setIsInitialized] = useState(false)
   const savedSelectionRef = useRef<{
     from: number
     to: number
@@ -22,20 +24,13 @@ export function EditorToolbar({
     isStrikethrough,
     isBulletList,
     isOrderedList,
+    isCodeBlock,
     textColor,
     alignment,
     fontSize,
     fontFamily,
 
-    setBold,
-    setItalic,
-    setStrikethrough,
-    setBulletList,
-    setOrderedList,
-    setTextColor,
-    setAlignment,
-    setFontSize,
-    setFontFamily
+    syncFormatting
   } = useEditorStore()
 
   useEffect(() => {
@@ -45,20 +40,6 @@ export function EditorToolbar({
       try {
         const { from, to } = editor.state.selection
         savedSelectionRef.current = { from, to }
-
-        setBold(editor.isActive('bold'))
-        setItalic(editor.isActive('italic'))
-        setStrikethrough(
-          editor.isActive('strike')
-        )
-
-        setBulletList(
-          editor.isActive('bulletList')
-        )
-
-        setOrderedList(
-          editor.isActive('orderedList')
-        )
 
         const currentAlignment =
           editor.isActive({
@@ -75,27 +56,30 @@ export function EditorToolbar({
                 ? 'justify'
                 : 'left'
 
-        setAlignment(currentAlignment)
-
         const textStyleAttributes =
           editor.getAttributes('textStyle') || {}
 
-        if (textStyleAttributes.color) {
-          setTextColor(
-            textStyleAttributes.color
-          )
-        }
+        const currentFormatting = useEditorStore.getState()
 
-        setFontSize(
-          textStyleAttributes.fontSize || '16px'
-        )
-
-        setFontFamily(
-          !textStyleAttributes.fontFamily ||
+        syncFormatting({
+          isBold: editor.isActive('bold'),
+          isItalic: editor.isActive('italic'),
+          isStrikethrough: editor.isActive('strike'),
+          isBulletList: editor.isActive('bulletList'),
+          isOrderedList: editor.isActive('orderedList'),
+          isCodeBlock: editor.isActive('codeBlock'),
+          textColor:
+            textStyleAttributes.color ||
+            currentFormatting.textColor,
+          alignment: currentAlignment,
+          fontSize:
+            textStyleAttributes.fontSize || '16px',
+          fontFamily:
+            !textStyleAttributes.fontFamily ||
             textStyleAttributes.fontFamily === 'Consolas'
-            ? 'var(--font-roboto-condensed)'
-            : textStyleAttributes.fontFamily
-        )
+              ? 'var(--font-roboto-condensed)'
+              : textStyleAttributes.fontFamily
+        })
       } catch (error) {
         console.error(
           'EditorToolbar: Failed to synchronize editor state:',
@@ -115,6 +99,7 @@ export function EditorToolbar({
     )
 
     updateStoreFromEditor()
+    setIsInitialized(true)
 
     return () => {
       editor.off(
@@ -129,19 +114,11 @@ export function EditorToolbar({
     }
   }, [
     editor,
-    setBold,
-    setItalic,
-    setStrikethrough,
-    setBulletList,
-    setOrderedList,
-    setTextColor,
-    setAlignment,
-    setFontSize,
-    setFontFamily
+    syncFormatting
   ])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     if (
       editor.isActive('bold') === isBold
@@ -163,10 +140,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, isBold])
+  }, [editor, isBold, isInitialized])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     if (
       editor.isActive('italic') ===
@@ -189,10 +166,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, isItalic])
+  }, [editor, isInitialized, isItalic])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     if (
       editor.isActive('strike') ===
@@ -215,10 +192,34 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, isStrikethrough])
+  }, [editor, isInitialized, isStrikethrough])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
+
+    if (
+      editor.isActive('codeBlock') ===
+      isCodeBlock
+    ) {
+      return
+    }
+
+    try {
+      editor
+        .chain()
+        .focus()
+        .toggleCodeBlock()
+        .run()
+    } catch (error) {
+      console.error(
+        'EditorToolbar: Failed to toggle code block:',
+        error
+      )
+    }
+  }, [editor, isCodeBlock, isInitialized])
+
+  useEffect(() => {
+    if (!editor || !isInitialized) return
 
     try {
       if (
@@ -238,10 +239,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, alignment])
+  }, [alignment, editor, isInitialized])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     try {
       const currentColor =
@@ -262,10 +263,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, textColor])
+  }, [editor, isInitialized, textColor])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     const bulletListActive =
       editor.isActive('bulletList')
@@ -288,10 +289,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, isBulletList])
+  }, [editor, isBulletList, isInitialized])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || !isInitialized) return
 
     const orderedListActive =
       editor.isActive('orderedList')
@@ -314,10 +315,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, isOrderedList])
+  }, [editor, isInitialized, isOrderedList])
 
   useEffect(() => {
-    if (!editor || !fontSize) return
+    if (!editor || !fontSize || !isInitialized) return
 
     try {
       const currentFontSize =
@@ -346,10 +347,10 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, fontSize])
+  }, [editor, fontSize, isInitialized])
 
   useEffect(() => {
-    if (!editor || !fontFamily) return
+    if (!editor || !fontFamily || !isInitialized) return
 
     try {
       const currentFontFamily =
@@ -374,7 +375,7 @@ export function EditorToolbar({
         error
       )
     }
-  }, [editor, fontFamily])
+  }, [editor, fontFamily, isInitialized])
 
   return null
 }

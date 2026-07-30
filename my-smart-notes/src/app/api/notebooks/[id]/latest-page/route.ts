@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { privateConditionalJson } from '@/lib/httpCache'
 import {
   apiErrorResponse,
   assertUuid,
@@ -20,10 +20,17 @@ export async function GET(
         notebook_id: notebookId,
         user_id: user.id
       },
-      orderBy: { updated_at: 'desc' }
+      orderBy: { updated_at: 'desc' },
+      select: {
+        id: true
+      }
     })
     
-    return NextResponse.json(latestPage)
+    return privateConditionalJson(
+      request,
+      latestPage,
+      `${user.id}:notebook:${notebookId}:latest-page`
+    )
   } catch (error) {
     return apiErrorResponse(error, 'Failed to fetch latest page')
   }

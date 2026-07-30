@@ -1,6 +1,16 @@
 const OPENAI_API_URL = 'https://api.openai.com/v1'
 const DEFAULT_RESPONSE_MODEL = 'gpt-5.6-terra'
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'
+const DEFAULT_MODERATION_MODEL = 'omni-moderation-latest'
+
+export class AiSafetyError extends Error {
+  constructor(
+    message = 'This AI request cannot be processed safely. Rephrase it and try again.'
+  ) {
+    super(message)
+    this.name = 'AiSafetyError'
+  }
+}
 
 function getApiKey() {
   const apiKey = process.env.OPENAI_API_KEY
@@ -123,12 +133,37 @@ function externalCitations(result: OpenAiTextResponse) {
   )
 }
 
+export async function moderateText(text: string) {
+  if (!text.trim()) return
+
+  const result = await openAiRequest<{
+    results?: Array<{ flagged?: boolean }>
+  }>('/moderations', {
+    model:
+      process.env.OPENAI_MODERATION_MODEL ??
+      DEFAULT_MODERATION_MODEL,
+    input: text
+  })
+
+  if (
+    !Array.isArray(result.results) ||
+    result.results.length < 1
+  ) {
+    throw new Error('AI provider returned invalid moderation data')
+  }
+
+  if (result.results.some((item) => item.flagged === true)) {
+    throw new AiSafetyError()
+  }
+}
+
 export async function createGroundedAnswer(
   prompt: string,
   instructions: string,
   options: {
     webSearch?: 'off' | 'auto' | 'required'
     maxOutputTokens?: number
+    safetyIdentifier?: string
   } = {}
 ) {
   const body: Record<string, unknown> = {
@@ -138,7 +173,12 @@ export async function createGroundedAnswer(
     instructions,
     input: prompt,
     reasoning: { effort: 'low' },
-    max_output_tokens: options.maxOutputTokens ?? 900
+    max_output_tokens: options.maxOutputTokens ?? 900,
+    store: false
+  }
+
+  if (options.safetyIdentifier) {
+    body.safety_identifier = options.safetyIdentifier
   }
 
   if (options.webSearch && options.webSearch !== 'off') {
@@ -162,6 +202,8 @@ export async function createGroundedAnswer(
     throw new Error('AI provider returned an empty response')
   }
 
+  await moderateText(answer)
+
   return {
     answer,
     externalCitations: externalCitations(result)
@@ -170,20 +212,27 @@ export async function createGroundedAnswer(
 
 export async function createStructuredQuiz(
   prompt: string,
-  instructions: string
+  instructions: string,
+  maximumQuestions = 10,
+  safetyIdentifier?: string
 ) {
-  const result = await openAiRequest<{
-    output?: Array<{
-      content?: Array<{ type?: string; text?: string }>
-    }>
-  }>('/responses', {
+  const result = await openAiRequest<OpenAiTextResponse>(
+    '/responses',
+    {
     model:
       process.env.OPENAI_RESPONSE_MODEL ??
       DEFAULT_RESPONSE_MODEL,
     instructions,
     input: prompt,
     reasoning: { effort: 'low' },
-    max_output_tokens: 1800,
+    store: false,
+    ...(safetyIdentifier
+      ? { safety_identifier: safetyIdentifier }
+      : {}),
+    max_output_tokens: Math.min(
+      4_000,
+      700 + maximumQuestions * 220
+    ),
     text: {
       format: {
         type: 'json_schema',
@@ -198,7 +247,7 @@ export async function createStructuredQuiz(
             questions: {
               type: 'array',
               minItems: 3,
-              maxItems: 10,
+              maxItems: maximumQuestions,
               items: {
                 type: 'object',
                 additionalProperties: false,
@@ -234,13 +283,16 @@ export async function createStructuredQuiz(
         }
       }
     }
-  })
+  }
+  )
 
   const json = responseText(result)
 
   if (!json) {
     throw new Error('AI provider returned an empty quiz')
   }
+
+  await moderateText(json)
 
   return JSON.parse(json) as {
     title: string

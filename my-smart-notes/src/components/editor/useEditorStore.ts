@@ -17,6 +17,7 @@ interface EditorState {
   // Lists
   isBulletList: boolean
   isOrderedList: boolean
+  isCodeBlock: boolean
   
   // Font
   fontSize: string
@@ -36,11 +37,24 @@ interface EditorState {
   setTextColor: (color: string) => void
   setBulletList: (active: boolean) => void
   setOrderedList: (active: boolean) => void
+  setCodeBlock: (active: boolean) => void
   setFontSize: (size: string) => void
   setFontFamily: (family: string) => void
   setHasSelection: (hasSelection: boolean) => void
   setCanUndo: (canUndo: boolean) => void
   setCanRedo: (canRedo: boolean) => void
+  syncFormatting: (formatting: {
+    isBold: boolean
+    isItalic: boolean
+    isStrikethrough: boolean
+    isBulletList: boolean
+    isOrderedList: boolean
+    isCodeBlock: boolean
+    textColor: string
+    alignment: 'left' | 'center' | 'right' | 'justify'
+    fontSize: string
+    fontFamily: string
+  }) => void
   
   // Reset all formatting to defaults
   resetFormatting: () => void
@@ -56,6 +70,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   textColor: '#000000',
   isBulletList: false,
   isOrderedList: false,
+  isCodeBlock: false,
   fontSize: '16px',
   fontFamily: 'var(--font-roboto-condensed)',
   hasSelection: false,
@@ -71,11 +86,28 @@ export const useEditorStore = create<EditorState>((set) => ({
   setTextColor: (textColor) => set({ textColor }),
   setBulletList: (isBulletList) => set({ isBulletList }),
   setOrderedList: (isOrderedList) => set({ isOrderedList }),
+  setCodeBlock: (isCodeBlock) => set({ isCodeBlock }),
   setFontSize: (fontSize) => set({ fontSize }),
   setFontFamily: (fontFamily) => set({ fontFamily }),
   setHasSelection: (hasSelection) => set({ hasSelection }),
   setCanUndo: (canUndo) => set({ canUndo }),
   setCanRedo: (canRedo) => set({ canRedo }),
+  syncFormatting: (formatting) =>
+    set((state) => {
+      const unchanged =
+        state.isBold === formatting.isBold &&
+        state.isItalic === formatting.isItalic &&
+        state.isStrikethrough === formatting.isStrikethrough &&
+        state.isBulletList === formatting.isBulletList &&
+        state.isOrderedList === formatting.isOrderedList &&
+        state.isCodeBlock === formatting.isCodeBlock &&
+        state.textColor === formatting.textColor &&
+        state.alignment === formatting.alignment &&
+        state.fontSize === formatting.fontSize &&
+        state.fontFamily === formatting.fontFamily
+
+      return unchanged ? state : formatting
+    }),
   
   resetFormatting: () => set({
     isBold: false,
@@ -86,6 +118,7 @@ export const useEditorStore = create<EditorState>((set) => ({
     textColor: '#000000',
     isBulletList: false,
     isOrderedList: false,
+    isCodeBlock: false,
     fontSize: '16px',
     fontFamily: 'var(--font-roboto-condensed)',
   }),

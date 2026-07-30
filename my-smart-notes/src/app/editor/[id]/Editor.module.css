@@ -6,6 +6,56 @@
   color: #ffffff;
 }
 
+.staleNotebookOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 13, 19, 0.78);
+  backdrop-filter: blur(3px);
+}
+
+.staleNotebookCard {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid #3f4c5f;
+  border-radius: 10px;
+  background: #161c25;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  color: #e5e7eb;
+  text-align: center;
+}
+
+.staleNotebookCard h2 {
+  margin: 0 0 10px;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.staleNotebookCard p {
+  margin: 0 0 18px;
+  color: #b8c2d1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.staleNotebookCard button {
+  padding: 8px 18px;
+  border: 1px solid #65758b;
+  border-radius: 6px;
+  background: #435269;
+  color: #f8fafc;
+  font: inherit;
+  cursor: pointer;
+}
+
+.staleNotebookCard button:hover {
+  background: #50627c;
+}
+
 /* SIDEBAR */
 .sidebar {
   width: 150px;
@@ -274,6 +324,59 @@
   background-color: #1f2937;
 }
 
+.fileMenuOption:disabled {
+  color: #6b7280;
+  cursor: wait;
+}
+
+.fileMenuOption:disabled:hover {
+  background-color: transparent;
+}
+
+.exportFormatHeading {
+  padding: 8px;
+  border-bottom: 1px solid #273244;
+  color: #9ca3af;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.exportBackOption {
+  border-top: 1px solid #273244;
+  color: #9ca3af;
+}
+
+.localMirrorStatus {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px 4px;
+  border-top: 1px solid #273244;
+  color: #94a3b8;
+  font-size: 9px;
+}
+
+.localMirrorStatus span:last-child {
+  overflow: hidden;
+  color: #cbd5e1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visuallyHiddenFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .dangerFileMenuOption {
   color: #fca5a5;
 }
@@ -329,6 +432,20 @@
   flex-direction: column;
 }
 
+.pagesLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pageWarmupStatus {
+  color: #7f8da3;
+  font-size: 9px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
 .pagesScroll {
   flex: 1;
   overflow-y: auto;
@@ -362,6 +479,10 @@
 .activePage {
   background-color: #374151;
   color: #ffffff;
+}
+
+.activePageItem {
+  font-weight: 700;
 }
 
 /* MAIN CONTENT */
@@ -656,6 +777,37 @@
   caret-color: currentColor;
 }
 
+.paper .contentArea :global(.ProseMirror pre) {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 0.9rem 0;
+  overflow-x: auto;
+  border: 1px solid #273244;
+  border-radius: 8px;
+  background: #111827;
+  padding: 0.85rem 1rem;
+  color: #dbeafe;
+  font-family: var(--font-geist-mono), Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+  line-height: 1.55;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.paper .contentArea :global(.ProseMirror pre code) {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.darkPaper .contentArea :global(.ProseMirror pre) {
+  border-color: #334155;
+  background: #090d13;
+  color: #dbeafe;
+}
+
 .paper .contentArea :global(.ProseMirror) ul {
   list-style-type: disc !important;
   list-style-position: outside !important;
@@ -725,13 +877,17 @@
 
 /* Deferred controls: fade the entire section, including its label */
 .sidebarSection:has(.sidebarSelect:disabled),
-.sidebarSection:has(.insertOption:disabled) {
+.sidebarSection:has(.insertOption:disabled):not(:has(.insertOption:not(:disabled))) {
   opacity: 0.45;
 }
 
 .sidebarSelect:disabled,
 .insertOption:disabled {
   cursor: not-allowed;
+}
+
+.sidebarSection:not(:has(.sidebarSelect:disabled)) .insertOption:disabled {
+  opacity: 0.45;
 }
 
 .insertOption:disabled:hover {
@@ -748,6 +904,37 @@
 
 .dragAfter {
   box-shadow: inset 0 -2px 0 #3b82f6;
+}
+
+.draggingPageItem {
+  opacity: 0.45;
+}
+
+.dragOverBefore,
+.dragOverAfter {
+  position: relative;
+}
+
+.dragOverBefore::before,
+.dragOverAfter::after {
+  position: absolute;
+  right: 4px;
+  left: 4px;
+  z-index: 2;
+  height: 3px;
+  border-radius: 999px;
+  background: #86a6c7;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.75);
+  content: '';
+  pointer-events: none;
+}
+
+.dragOverBefore::before {
+  top: -2px;
+}
+
+.dragOverAfter::after {
+  bottom: -2px;
 }
 
 .settingsBackdrop {
@@ -1454,4 +1641,417 @@
   .aiPanel {
     width: 300px;
   }
+}
+
+/* AI workspace refinements */
+.aiPanel {
+  border-left-color: #273244;
+  background: #111827;
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.34);
+}
+
+.aiPanelHeader,
+.aiComposer {
+  border-color: #273244;
+  background: #111827;
+}
+
+.aiMessages {
+  background: #0f1623;
+  scrollbar-color: #475569 #0f1623;
+}
+
+.aiMessages::-webkit-scrollbar-track {
+  background: #0f1623;
+}
+
+.aiMessages::-webkit-scrollbar-thumb {
+  border-color: #0f1623;
+  background: #475569;
+}
+
+.aiHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.aiAssistantMessage {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #263446;
+  border-radius: 8px;
+  background: #151f2d;
+  padding: 10px 11px;
+}
+
+.aiMessageBody {
+  color: #d8e1eb;
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.aiMessageBody button {
+  display: inline;
+  border: 0;
+  background: transparent;
+  color: #9dc5eb;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: #506f8e;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.aiMessageBody button:hover {
+  color: #c4e1fb;
+  text-decoration-color: #87afd4;
+}
+
+.aiInputRow {
+  border-color: #334155;
+  background: #0b111b;
+}
+
+.aiPanel.aiPanelFullscreen {
+  inset: 0;
+  z-index: 500;
+  width: 100vw;
+  height: 100dvh;
+  border-left: 0;
+}
+
+.aiPanelFullscreen .aiPanelHeader,
+.aiPanelFullscreen .aiMessages,
+.aiPanelFullscreen .aiComposer {
+  width: min(900px, 100%);
+  box-sizing: border-box;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.aiPanelFullscreen .aiMessages {
+  padding-right: 24px;
+  padding-left: 24px;
+}
+
+.aiPanelFullscreen .aiMessage {
+  max-width: min(760px, 92%);
+}
+
+.aiPanelFullscreen .aiAssistantMessage {
+  width: min(760px, 100%);
+}
+:global(html[data-app-theme='light']) .editorContainer {
+  background: var(--sentia-light-canvas);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .loadingCard,
+:global(html[data-app-theme='light']) .fileMenu,
+:global(html[data-app-theme='light']) .paper,
+:global(html[data-app-theme='light']) .navArrow,
+:global(html[data-app-theme='light']) .settingsModal,
+:global(html[data-app-theme='light']) .aiLauncher,
+:global(html[data-app-theme='light']) .aiPanel,
+:global(html[data-app-theme='light']) .staleNotebookCard {
+  box-shadow: none;
+}
+
+:global(html[data-app-theme='light']) .sidebar {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface-soft);
+}
+
+:global(html[data-app-theme='light']) .sidebar input,
+:global(html[data-app-theme='light']) .sidebar select,
+:global(html[data-app-theme='light']) .modeButtons,
+:global(html[data-app-theme='light']) .fileMenu {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .sidebar button {
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .sidebar button:hover,
+:global(html[data-app-theme='light']) .fileMenuOption:hover,
+:global(html[data-app-theme='light']) .pageItem:hover {
+  background: var(--sentia-light-accent-soft);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .activeModeButton,
+:global(html[data-app-theme='light']) .activeFormatting,
+:global(html[data-app-theme='light']) .activeList,
+:global(html[data-app-theme='light']) .activePage {
+  border-color: #7396c1 !important;
+  background: #d9e8f8 !important;
+  color: var(--sentia-light-text) !important;
+}
+
+:global(html[data-app-theme='light']) .sidebarLabel,
+:global(html[data-app-theme='light']) .modeLabel,
+:global(html[data-app-theme='light']) .pagesLabelRow,
+:global(html[data-app-theme='light']) .pageWarmupStatus {
+  color: var(--sentia-light-text-muted);
+}
+
+:global(html[data-app-theme='light']) .mainContent,
+:global(html[data-app-theme='light']) .documentArea {
+  background: var(--sentia-light-canvas);
+}
+
+:global(html[data-app-theme='light']) .settingsModal,
+:global(html[data-app-theme='light']) .aiPanel,
+:global(html[data-app-theme='light']) .staleNotebookCard {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .settingsModalHeader,
+:global(html[data-app-theme='light']) .aiPanelHeader {
+  border-color: var(--sentia-light-editor-border);
+}
+
+:global(html[data-app-theme='light']) .aiPanelHeader {
+  background: var(--sentia-light-surface-soft);
+}
+
+:global(html[data-app-theme='light']) .settingsSection,
+:global(html[data-app-theme='light']) .commandRow,
+:global(html[data-app-theme='light']) .reorderGuide,
+:global(html[data-app-theme='light']) .aiMessage,
+:global(html[data-app-theme='light']) .aiComposer,
+:global(html[data-app-theme='light']) .aiTargetRow {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface-soft);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .settingsSectionTitle,
+:global(html[data-app-theme='light']) .settingsPreferenceName,
+:global(html[data-app-theme='light']) .aiPanelHeader h2,
+:global(html[data-app-theme='light']) .aiMessageBody {
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .settingsPreferenceDescription,
+:global(html[data-app-theme='light']) .settingsNote,
+:global(html[data-app-theme='light']) .commandDescription,
+:global(html[data-app-theme='light']) .aiStatus,
+:global(html[data-app-theme='light']) .aiWelcome {
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .aiPanel input,
+:global(html[data-app-theme='light']) .aiPanel textarea,
+:global(html[data-app-theme='light']) .aiPanel button,
+:global(html[data-app-theme='light']) .settingsModal button {
+  border-color: var(--sentia-light-editor-border);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .aiTargetRow .aiTargetActive {
+  border-color: #6387ad;
+  background: #dbe9f8;
+  color: #17324f;
+}
+
+:global(html[data-app-theme='light']) .formattingOption,
+:global(html[data-app-theme='light']) .alignmentOption,
+:global(html[data-app-theme='light']) .listOption,
+:global(html[data-app-theme='light']) .insertOption,
+:global(html[data-app-theme='light']) .fileOption,
+:global(html[data-app-theme='light']) .navArrow,
+:global(html[data-app-theme='light']) .settingsCloseButton,
+:global(html[data-app-theme='light']) .aiCloseButton {
+  border-color: var(--sentia-light-editor-border-strong);
+  background: var(--sentia-light-control);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .modeButton {
+  background: transparent;
+}
+
+:global(html[data-app-theme='light']) .notebookNameInput::placeholder {
+  color: #6e84a0;
+}
+
+:global(html[data-app-theme='light']) .pageItem {
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .navArrow:hover,
+:global(html[data-app-theme='light']) .formattingOption:hover,
+:global(html[data-app-theme='light']) .alignmentOption:hover,
+:global(html[data-app-theme='light']) .listOption:hover,
+:global(html[data-app-theme='light']) .insertOption:hover,
+:global(html[data-app-theme='light']) .fileOption:hover {
+  background: var(--sentia-light-accent-soft);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .paperThemeControl,
+:global(html[data-app-theme='light']) .commandKeys,
+:global(html[data-app-theme='light']) .reorderGuidePage,
+:global(html[data-app-theme='light']) .aiSelectionPreview {
+  border-color: var(--sentia-light-editor-border-strong);
+  background: var(--sentia-light-control);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .paperThemeButton {
+  background: transparent;
+  color: var(--sentia-light-text-muted);
+}
+
+:global(html[data-app-theme='light']) .paperThemeButtonActive,
+:global(html[data-app-theme='light']) .settingsTutorialButton,
+:global(html[data-app-theme='light']) .aiAskButton {
+  border-color: #3f6191;
+  background: var(--sentia-light-accent);
+  color: #ffffff;
+}
+
+:global(html[data-app-theme='light']) .settingsTutorialSecondaryButton,
+:global(html[data-app-theme='light']) .aiActionRow button,
+:global(html[data-app-theme='light']) .aiMessageActions button {
+  border-color: var(--sentia-light-editor-border-strong);
+  background: var(--sentia-light-control);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .aiMessages {
+  background: #edf4fc;
+  scrollbar-color: #8faac8 #edf4fc;
+}
+
+:global(html[data-app-theme='light']) .aiUserMessage {
+  border-color: #a9c3e1;
+  background: #dbe9f8;
+  color: #213c5d;
+}
+
+:global(html[data-app-theme='light']) .aiAssistantMessage {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .aiComposer,
+:global(html[data-app-theme='light']) .aiInputRow {
+  border-color: var(--sentia-light-editor-border);
+  background: var(--sentia-light-surface-soft);
+}
+
+:global(html[data-app-theme='light']) .aiPanel input,
+:global(html[data-app-theme='light']) .aiPanel textarea {
+  border-color: var(--sentia-light-editor-border-strong) !important;
+  background: var(--sentia-light-surface) !important;
+  color: var(--sentia-light-text) !important;
+}
+
+:global(html[data-app-theme='light']) .settingsBackdrop {
+  background: rgba(26, 48, 76, 0.34);
+}
+
+:global(html[data-app-theme='light']) .staleNotebookOverlay {
+  background: rgba(26, 48, 76, 0.42);
+}
+
+:global(html[data-app-theme='light']) .loadingContainer {
+  background: var(--sentia-light-canvas) !important;
+}
+
+:global(html[data-app-theme='light']) .loadingText {
+  color: var(--sentia-light-text) !important;
+}
+
+:global(html[data-app-theme='light']) .loadingCard {
+  border-color: var(--sentia-light-editor-border) !important;
+  background: var(--sentia-light-surface) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light']) .loadingSpinner {
+  border-color: var(--sentia-light-border-strong) !important;
+  border-top-color: var(--sentia-light-accent) !important;
+}
+
+:global(html[data-app-theme='light']) .loadingSubtext {
+  color: var(--sentia-light-text-secondary) !important;
+}
+
+:global(html[data-app-theme='light']) .loadingDot {
+  background: var(--sentia-light-accent) !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookBackdrop {
+  background: rgba(26, 48, 76, 0.3) !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookDialog {
+  border-color: var(--sentia-light-editor-border) !important;
+  background: var(--sentia-light-surface) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookTitle {
+  color: var(--sentia-light-text) !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookDescription {
+  color: var(--sentia-light-text-secondary) !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookError {
+  color: #9f2f3e !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookActions {
+  border-color: var(--sentia-light-editor-border) !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookConfirm {
+  border-color: #c7838b !important;
+  background: #f8e8ea !important;
+  color: #8d2634 !important;
+}
+
+:global(html[data-app-theme='light']) .deleteNotebookCancel {
+  border-color: var(--sentia-light-editor-border-strong) !important;
+  background: var(--sentia-light-control) !important;
+  color: var(--sentia-light-text) !important;
+}
+
+:global(html[data-app-theme='light']) .paper:not(.darkPaper) .contentArea :global(.ProseMirror pre) {
+  border-color: var(--sentia-light-editor-border);
+  background: #edf5fe;
+  color: var(--sentia-light-text);
+  box-shadow: inset 3px 0 0 #8aabd0;
+  caret-color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .paper {
+  box-sizing: border-box;
+  border: 1px solid #000000;
+}
+
+:global(html[data-app-theme='light']) .paper:not(.darkPaper) .contentArea :global(.ProseMirror pre code) {
+  background: transparent;
+  color: inherit;
+}
+
+:global(html[data-app-theme='light']) .paper:not(.darkPaper) .contentArea :global(.ProseMirror pre ::selection) {
+  background: #c9def5;
+  color: var(--sentia-light-text);
 }

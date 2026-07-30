@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { privateConditionalJson } from '@/lib/httpCache'
 
 import {
+  ApiRequestError,
   apiErrorResponse,
   assertAllowedKeys,
   assertUuid,
@@ -12,6 +14,11 @@ import {
   requireAuthenticatedUser,
   requireSameOrigin
 } from '@/lib/apiSecurity'
+import {
+  claimNotebookRevision,
+  readExpectedRevision,
+  revisionResponse
+} from '@/lib/notebookRevision'
 
 const NOTEBOOK_STYLES = [
   'blank',
@@ -51,7 +58,11 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(notebook)
+    return privateConditionalJson(
+      request,
+      notebook,
+      `${user.id}:notebook:${notebookId}`
+    )
   } catch (error) {
     return apiErrorResponse(error, 'Failed to fetch notebook')
   }
@@ -68,7 +79,12 @@ export async function PATCH(
     assertUuid(notebookId, 'notebook ID')
     const user = await requireAuthenticatedUser(request)
     const body = await parseJsonObject(request, 16_384)
-    assertAllowedKeys(body, ['name', 'style', 'markOpened'])
+    assertAllowedKeys(body, [
+      'name',
+      'style',
+      'markOpened',
+      'expectedRevision'
+    ])
 
     const data: {
       name?: string
@@ -99,6 +115,32 @@ export async function PATCH(
       )
     }
 
+    const editsNotebook =
+      data.name !== undefined || data.style !== undefined
+
+    if (!editsNotebook) {
+      const updated = await prisma.notebook.updateMany({
+        where: {
+          id: notebookId,
+          user_id: user.id
+        },
+        data
+      })
+
+      if (updated.count === 0) {
+        return NextResponse.json(
+          { error: 'Notebook not found' },
+          { status: 404 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        last_opened_at:
+          data.last_opened_at?.toISOString() ?? null
+      })
+    }
+
     const existingNotebook =
       await prisma.notebook.findFirst({
         where: {
@@ -117,14 +159,31 @@ export async function PATCH(
       )
     }
 
-    const notebook = await prisma.notebook.update({
-      where: {
-        id: notebookId
-      },
-      data
-    })
+    if (body.expectedRevision === undefined) {
+      throw new ApiRequestError('expectedRevision is required')
+    }
 
-    return NextResponse.json(notebook)
+    const expectedRevision = readExpectedRevision(body)
+    const { notebook, revision } = await prisma.$transaction(
+      async (tx) => {
+        const revision = await claimNotebookRevision(
+          tx,
+          notebookId,
+          user.id,
+          expectedRevision
+        )
+        const notebook = await tx.notebook.update({
+          where: {
+            id: notebookId
+          },
+          data
+        })
+
+        return { notebook, revision }
+      }
+    )
+
+    return revisionResponse(notebook, revision)
   } catch (error) {
     return apiErrorResponse(error, 'Failed to update notebook')
   }

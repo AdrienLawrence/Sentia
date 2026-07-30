@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { privateConditionalJson } from '@/lib/httpCache'
 import {
   ApiRequestError,
   apiErrorResponse,
@@ -12,6 +13,11 @@ import {
   requireSameOrigin,
   validateTiptapDocument
 } from '@/lib/apiSecurity'
+import {
+  claimNotebookRevision,
+  readExpectedRevision,
+  revisionResponse
+} from '@/lib/notebookRevision'
 
 // GET /api/pages/[id] - Get single page with all content
 export async function GET(
@@ -42,7 +48,11 @@ export async function GET(
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    return NextResponse.json(page)
+    return privateConditionalJson(
+      request,
+      page,
+      `${user.id}:page:${id}`
+    )
   } catch (error) {
     return apiErrorResponse(error, 'Failed to fetch page')
   }
@@ -64,7 +74,10 @@ export async function PATCH(
         id,
         user_id: user.id
       },
-      select: { id: true }
+      select: {
+        id: true,
+        notebook_id: true
+      }
     })
 
     if (!existingPage) {
@@ -72,7 +85,12 @@ export async function PATCH(
     }
 
     const body = await parseJsonObject(request)
-    assertAllowedKeys(body, ['content', 'title'])
+    assertAllowedKeys(body, [
+      'content',
+      'title',
+      'expectedRevision'
+    ])
+    const expectedRevision = readExpectedRevision(body)
 
     if (
       body.content === undefined &&
@@ -94,16 +112,30 @@ export async function PATCH(
             body.content
           ) as Prisma.InputJsonValue)
 
-    const page = await prisma.page.update({
-      where: { id },
-      data: {
-        content,
-        title,
-        updated_at: new Date()
-      }
+    if (!existingPage.notebook_id) {
+      throw new ApiRequestError('Page is not attached to a notebook')
+    }
+
+    const { page, revision } = await prisma.$transaction(async (tx) => {
+      const revision = await claimNotebookRevision(
+        tx,
+        existingPage.notebook_id!,
+        user.id,
+        expectedRevision
+      )
+      const page = await tx.page.update({
+        where: { id },
+        data: {
+          content,
+          title,
+          updated_at: new Date()
+        }
+      })
+
+      return { page, revision }
     })
 
-    return NextResponse.json(page)
+    return revisionResponse(page, revision)
   } catch (error) {
     return apiErrorResponse(error, 'Failed to update page')
   }
@@ -125,18 +157,38 @@ export async function DELETE(
         id,
         user_id: user.id
       },
-      select: { id: true }
+      select: {
+        id: true,
+        notebook_id: true
+      }
     })
 
     if (!existingPage) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    await prisma.page.delete({
-      where: { id }
+    if (!existingPage.notebook_id) {
+      throw new ApiRequestError('Page is not attached to a notebook')
+    }
+
+    const body = await parseJsonObject(request, 16_384)
+    assertAllowedKeys(body, ['expectedRevision'])
+    const expectedRevision = readExpectedRevision(body)
+
+    const revision = await prisma.$transaction(async (tx) => {
+      const revision = await claimNotebookRevision(
+        tx,
+        existingPage.notebook_id!,
+        user.id,
+        expectedRevision
+      )
+      await tx.page.delete({
+        where: { id }
+      })
+      return revision
     })
 
-    return NextResponse.json({ message: 'Page deleted' })
+    return revisionResponse({ message: 'Page deleted' }, revision)
   } catch (error) {
     return apiErrorResponse(error, 'Failed to delete page')
   }

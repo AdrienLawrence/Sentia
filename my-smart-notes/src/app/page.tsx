@@ -16,7 +16,7 @@ export default function HomePage() {
       <header className="border-b border-slate-800/80 bg-[#0b0e13]/90 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex items-center px-6 py-4">
           <div className="mr-3 h-6 w-1 rounded-full bg-slate-500" />
-          <h1 className="text-xl font-semibold tracking-tight text-slate-50">ScribeAI</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-50">Sentia</h1>
         </div>
       </header>
 
@@ -80,31 +80,42 @@ export default function HomePage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-16 border-t border-slate-800 pt-5 text-sm text-slate-600">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">Questions, comments, and concerns</p>
-          <a
-            href="mailto:firestar9jr@gmail.com"
-            className="text-slate-500 hover:text-slate-200 hover:underline transition-colors"
-          >
-            [Email - firestar9jr@gmail.com]
-          </a>
-          <a
-            href="https://github.com/AdrienLawrence"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-4 text-slate-500 hover:text-slate-200 hover:underline transition-colors"
-          >
-            [GitHub - AdrienLawrence]
-          </a>
-          <a
-            href="https://www.linkedin.com/in/adrien-lawrence-b1483431b"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-4 text-slate-500 hover:text-slate-200 hover:underline transition-colors"
-          >
-            [LinkedIn - Adrien Lawrence]
-          </a>
-        </div>
+        <footer className="mt-16 border-t border-slate-800 pt-5 text-sm text-slate-600">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-slate-500">
+              © {new Date().getFullYear()} Sentia
+            </p>
+            <nav
+              aria-label="Footer"
+              className="flex flex-wrap gap-x-5 gap-y-2"
+            >
+              <a
+                href="/login"
+                className="text-slate-500 transition-colors hover:text-slate-200 hover:underline"
+              >
+                Sign in
+              </a>
+              <a
+                href="/accessibility"
+                className="text-slate-500 transition-colors hover:text-slate-200 hover:underline"
+              >
+                Accessibility
+              </a>
+              <a
+                href="/privacy"
+                className="text-slate-500 transition-colors hover:text-slate-200 hover:underline"
+              >
+                Privacy Policy
+              </a>
+              <a
+                href="/terms"
+                className="text-slate-500 transition-colors hover:text-slate-200 hover:underline"
+              >
+                Terms of Service
+              </a>
+            </nav>
+          </div>
+        </footer>
       </main>
     </div>
   )

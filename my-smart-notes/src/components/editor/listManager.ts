@@ -1,9 +1,10 @@
 // src/components/editor/listManager.ts
+import type { Editor } from '@tiptap/core'
 
 export class ListManager {
-  private editor: any
+  private editor: Editor
 
-  constructor(editor: any) {
+  constructor(editor: Editor) {
     this.editor = editor
   }
 

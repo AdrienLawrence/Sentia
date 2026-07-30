@@ -25,9 +25,9 @@ interface TutorialStep {
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     label: 'Start',
-    title: 'The ScribeAI workflow',
+    title: 'The Sentia workflow',
     summary:
-      'ScribeAI is organized around notebooks, pages, and a focused writing surface. This tour covers the complete workflow from creating a notebook to recovering deleted pages.',
+      'Sentia is organized around notebooks, pages, and a focused writing surface. This tour covers the complete workflow from creating a notebook to recovering deleted pages.',
     items: [
       {
         title: 'Dashboard',
@@ -56,7 +56,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
       {
         title: 'Create a notebook',
         description:
-          'Select + Create Notebook. ScribeAI creates the notebook and its first page, then opens the editor.'
+          'Select + Create Notebook. Sentia creates the notebook and its first page, then opens the editor.'
       },
       {
         title: 'Search notebooks',
@@ -103,7 +103,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
           'Change the starting name for future notebooks in Dashboard Settings under New Notebooks.'
       }
     ],
-    tip: 'Notebook deletion is permanent, so ScribeAI always asks for confirmation first.'
+    tip: 'Notebook deletion is permanent, so Sentia always asks for confirmation first.'
   },
   {
     label: 'Editor basics',
@@ -143,12 +143,14 @@ const TUTORIAL_STEPS: TutorialStep[] = [
       {
         title: 'Previous page',
         description:
-          'Select the left arrow to move to the previous page. It disables at the beginning of the notebook.'
+          'Select the left arrow or use Alt + Shift + Left Arrow to move to the previous page. It disables at the beginning of the notebook.',
+        keys: 'Alt + Shift + ←'
       },
       {
         title: 'Next or new page',
         description:
-          'Select the right arrow for the next page. At the end, the + arrow creates a new page immediately.'
+          'Select the right arrow or use Alt + Shift + Right Arrow for the next page. At the end, the command creates a new page immediately.',
+        keys: 'Alt + Shift + →'
       },
       {
         title: 'Direct page selection',
@@ -158,7 +160,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
       {
         title: 'Reorder pages',
         description:
-          'In Read mode, drag a bulleted page title above or below another title. The new order saves automatically.'
+          'In Read mode, drag a page title or focus it and use Alt + Up or Down Arrow. The new order saves automatically.',
+        keys: 'Alt + ↑ / ↓'
       },
       {
         title: 'Delete a page',
@@ -167,7 +170,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
         keys: 'Backspace'
       }
     ],
-    tip: 'New pages accept typing immediately. ScribeAI preserves the caret while the page finishes creating in the background.'
+    tip: 'New pages accept typing immediately. Sentia preserves the caret while the page finishes creating in the background.'
   },
   {
     label: 'Formatting',
@@ -200,6 +203,12 @@ const TUTORIAL_STEPS: TutorialStep[] = [
         title: 'Writing font',
         description:
           'Pages use Roboto Condensed as their clean default writing font.'
+      },
+      {
+        title: 'Code blocks',
+        description:
+          'Select Code Block or type three backticks followed by Space at the start of a line for an IDE-style fenced block.',
+        keys: '``` + Space'
       }
     ],
     tip: 'The softer active-button color indicates which formatting is active at the current caret position.'
@@ -235,9 +244,15 @@ const TUTORIAL_STEPS: TutorialStep[] = [
         title: 'Continue or finish a list',
         description:
           'Enter creates the next item. Press Enter on an empty list item to exit the list.'
+      },
+      {
+        title: 'Move to editor controls',
+        description:
+          'Use the Google Docs-style focus command to leave the writing surface. Arrow keys move between controls, and Escape returns to the page.',
+        keys: 'Ctrl/Cmd + Alt + Shift + M'
       }
     ],
-    tip: 'Tab is captured only inside the editor so it cannot unexpectedly move focus to browser controls while writing.'
+    tip: 'Tab remains dedicated to indentation. Ctrl/Cmd + Alt + Shift + M moves focus to the editor controls, and Escape returns to writing.'
   },
   {
     label: 'Undo & recovery',
@@ -287,6 +302,11 @@ const TUTORIAL_STEPS: TutorialStep[] = [
           'Open FILE, choose Delete Notebook, and confirm the destructive action.'
       },
       {
+        title: 'Local Markdown folder',
+        description:
+          'Choose Connect Local Folder to maintain a one-way Markdown mirror after cloud saves. Sentia manages only files recorded in its .sentia.json manifest; disconnecting leaves those files on your device.'
+      },
+      {
         title: 'Home',
         description:
           'Open FILE and choose Home to flush pending work and return to the dashboard.'
@@ -308,7 +328,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     label: 'Support & account',
     title: 'Feedback, account access, and next steps',
     summary:
-      'ScribeAI includes a feedback loop so problems and ideas can be submitted with optional diagnostic context.',
+      'Sentia includes a feedback loop so problems and ideas can be submitted with optional diagnostic context.',
     items: [
       {
         title: 'Submit feedback',
@@ -416,7 +436,7 @@ export function TutorialModal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="scribeai-tutorial-title"
+        aria-labelledby="sentia-tutorial-title"
         className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-[#0d1117] text-slate-100 shadow-2xl shadow-black/60"
       >
         <header className="border-b border-slate-800 px-5 py-4 sm:px-6">
@@ -432,10 +452,10 @@ export function TutorialModal({
               </div>
 
               <h2
-                id="scribeai-tutorial-title"
+                id="sentia-tutorial-title"
                 className="mt-2 text-xl font-semibold tracking-tight"
               >
-                ScribeAI Tutorial
+                Sentia Tutorial
               </h2>
             </div>
 

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { createClient } from '@/lib/supabase/server'
+import { markPasswordRecoveryVerified } from '@/lib/passwordRecovery'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const flow = requestUrl.searchParams.get('flow')
   const requestedPath = requestUrl.searchParams.get('next')
   const nextPath = isSafeInternalPath(requestedPath)
     ? requestedPath
@@ -15,14 +17,25 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      return NextResponse.redirect(
+      const response = NextResponse.redirect(
         new URL(nextPath, requestUrl.origin)
       )
+
+      return flow === 'recovery'
+        ? markPasswordRecoveryVerified(response)
+        : response
     }
   }
 
   return NextResponse.redirect(
-    new URL('/login?oauth=failed', requestUrl.origin)
+    new URL(
+      flow === 'recovery'
+        ? '/forgot-password?recovery=failed'
+        : flow === 'email'
+        ? '/login?confirmation=failed'
+        : '/login?oauth=failed',
+      requestUrl.origin
+    )
   )
 }
 

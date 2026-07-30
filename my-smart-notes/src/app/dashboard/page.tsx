@@ -1,73 +1,101 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { FeedbackModal } from '@/components/FeedbackModal'
 import { TutorialModal } from '@/components/TutorialModal'
+import { LegalConsentGate } from '@/features/legal/LegalConsentGate'
+import {
+  LEGAL_CONSENT_SESSION_KEY
+} from '@/features/legal/constants'
+import type { User } from '@supabase/supabase-js'
+import {
+  DEFAULT_NOTEBOOK_NAME_KEY,
+  NOTEBOOK_VIEW_KEY,
+  PENDING_NOTEBOOK_DELETION_KEY
+} from '@/features/dashboard/constants'
+import { formatNotebookDate } from '@/features/dashboard/lib/formatNotebookDate'
+import {
+  clearNotebookSessionCache,
+  readNotebookSessionCache,
+  writeNotebookSessionCache
+} from '@/features/dashboard/lib/notebookSessionCache'
+import type {
+  DashboardNotebook,
+  PendingNotebookDeletion
+} from '@/features/dashboard/model/types'
+import { DashboardSettingsModal } from '@/features/dashboard/components/DashboardSettingsModal'
+import { DeleteNotebookModal } from '@/features/dashboard/components/DeleteNotebookModal'
+import { DashboardImportControls } from '@/features/dashboard/components/DashboardImportControls'
+import {
+  isSupportedImportFile,
+  MAX_IMPORT_FILES,
+  MAX_IMPORT_TOTAL_BYTES,
+  notebookNameFromFiles
+} from '@/features/file-transfer/lib/content'
+import { readImportedFile } from '@/features/file-transfer/lib/fileImport'
+import { createNotebookFromImport } from '@/features/file-transfer/lib/importNotebook'
+import { NOTEBOOK_REVISION_HEADER } from '@/lib/notebookRevisionShared'
+import {
+  applyAppTheme,
+  readAppTheme,
+  saveAppTheme
+} from '@/features/theme/appTheme'
+import { clearStoredDirectoryHandles } from '@/features/local-mirror/lib/localMarkdownMirror'
 
-interface Notebook {
-  id: string
-  name: string
-  style: string
-  created_at: string
-  last_opened_at?: string | null
-  user_id: string
-  _count: {
-    pages: number
+type Notebook = DashboardNotebook
+
+function handleMenuKeyboardNavigation(
+  event: ReactKeyboardEvent<HTMLDivElement>,
+  onEscape: () => void
+) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    onEscape()
+    return
+  }
+
+  if (
+    !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)
+  ) {
+    return
+  }
+
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]:not([disabled])'
+    )
+  ).filter((item) => item.offsetParent !== null)
+  const currentIndex = items.indexOf(
+    event.target as HTMLElement
+  )
+
+  if (currentIndex === -1 || items.length === 0) return
+
+  event.preventDefault()
+
+  if (event.key === 'Home') {
+    items[0].focus()
+  } else if (event.key === 'End') {
+    items[items.length - 1].focus()
+  } else {
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const nextIndex =
+      (currentIndex + direction + items.length) % items.length
+    items[nextIndex].focus()
   }
 }
 
-interface PendingNotebookDeletion {
-  notebookId: string
-  requestedAt: number
-}
-
-const PENDING_NOTEBOOK_DELETION_KEY =
-  'scribeai:pendingNotebookDeletion'
-const DEFAULT_NOTEBOOK_NAME_KEY =
-  'scribeai:defaultNotebookName'
-const NOTEBOOK_VIEW_KEY = 'scribeai:notebookListView'
-const EDITOR_PAPER_THEME_KEY = 'scribeai:editorPaperTheme'
-
-const formatNotebookDate = (notebook: Notebook) => {
-  const today = new Date()
-  const lastOpened = notebook.last_opened_at
-    ? new Date(notebook.last_opened_at)
-    : null
-  const formatDate = (date: Date) =>
-    date.toLocaleDateString([], {
-      month: 'long',
-      day: 'numeric',
-      year:
-        date.getFullYear() === today.getFullYear()
-          ? undefined
-          : 'numeric'
-    })
-
-  if (lastOpened) {
-    const openedToday =
-      lastOpened.getFullYear() === today.getFullYear() &&
-      lastOpened.getMonth() === today.getMonth() &&
-      lastOpened.getDate() === today.getDate()
-
-    if (openedToday) {
-      return `Opened ${lastOpened.toLocaleTimeString([], {
-        hour: 'numeric',
-        minute: '2-digit'
-      })}`
-    }
-
-    return `Opened ${formatDate(lastOpened)}`
-  }
-
-  return `Created ${formatDate(new Date(notebook.created_at))}`
-}
-
-export default function DashboardPage() {
+function DashboardPageContent() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
   const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [deletionError, setDeletionError] = useState<string | null>(null)
   const [activeNotebookMenuId, setActiveNotebookMenuId] =
@@ -92,15 +120,37 @@ export default function DashboardPage() {
   const [darkEditorPaper, setDarkEditorPaper] =
     useState(false)
   const [notebookSearch, setNotebookSearch] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(
+    null
+  )
+  const [creationError, setCreationError] = useState<string | null>(
+    null
+  )
+  const [isCreatingNotebook, setIsCreatingNotebook] =
+    useState(false)
 
   const deletionProcessingRef = useRef(false)
+  const creationInProgressRef = useRef(false)
+  const profileButtonRef = useRef<HTMLButtonElement>(null)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
+  const checkUserRef = useRef<() => Promise<void>>(
+    async () => undefined
+  )
+  const initializationStartedRef = useRef(false)
 
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
-    void checkUser()
+    if (initializationStartedRef.current) return
+    initializationStartedRef.current = true
+    void checkUserRef.current()
   }, [])
+
+  useEffect(() => {
+    if (user) router.prefetch('/editor/prefetch')
+  }, [router, user])
 
   useEffect(() => {
     const savedName = localStorage.getItem(
@@ -118,9 +168,9 @@ export default function DashboardPage() {
     setListView(
       localStorage.getItem(NOTEBOOK_VIEW_KEY) === 'true'
     )
-    setDarkEditorPaper(
-      localStorage.getItem(EDITOR_PAPER_THEME_KEY) === 'dark'
-    )
+    const theme = readAppTheme()
+    setDarkEditorPaper(theme === 'dark')
+    applyAppTheme(theme)
   }, [])
 
   const readPendingNotebookDeletion =
@@ -164,8 +214,9 @@ export default function DashboardPage() {
 
   const checkUser = async () => {
     const {
-      data: { user }
-    } = await supabase.auth.getUser()
+      data: { session }
+    } = await supabase.auth.getSession()
+    const user = session?.user ?? null
 
     if (!user) {
       router.push('/login')
@@ -173,8 +224,17 @@ export default function DashboardPage() {
     }
 
     setUser(user)
-    await fetchNotebooks()
+    const cached = readNotebookSessionCache(user.id)
+
+    if (cached) {
+      setNotebooks(cached.notebooks)
+      setLoading(false)
+    }
+
+    await fetchNotebooks(cached, user.id)
   }
+
+  checkUserRef.current = checkUser
 
   const finalizeOptimisticNotebookDeletion = async (
     pendingDeletion: PendingNotebookDeletion,
@@ -264,16 +324,48 @@ export default function DashboardPage() {
     }
   }
 
-  const fetchNotebooks = async () => {
+  const fetchNotebooks = async (
+    cached?: {
+      etag?: string
+      notebooks: Notebook[]
+    } | null,
+    authenticatedUserId?: string
+  ) => {
     try {
-      const response = await fetch('/api/notebooks')
+      const response = await fetch('/api/notebooks', {
+        headers: cached?.etag
+          ? {
+              'If-None-Match': cached.etag
+            }
+          : undefined
+      })
+
+      if (response.status === 304) {
+        return
+      }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          if (authenticatedUserId) {
+            clearNotebookSessionCache(authenticatedUserId)
+          }
+          router.push('/login')
+          return
+        }
+
         throw new Error('Failed to fetch notebooks')
       }
 
       const fetchedNotebooks: Notebook[] =
         await response.json()
+
+      if (authenticatedUserId) {
+        writeNotebookSessionCache(
+          authenticatedUserId,
+          fetchedNotebooks,
+          response.headers.get('etag') ?? undefined
+        )
+      }
 
       const pendingDeletion =
         readPendingNotebookDeletion()
@@ -296,13 +388,68 @@ export default function DashboardPage() {
       )
     } catch (error) {
       console.error('Error fetching notebooks:', error)
-      setNotebooks([])
+      if (!cached) setNotebooks([])
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    if (!user || loading) return
+    writeNotebookSessionCache(
+      user.id,
+      notebooks.filter(
+        (notebook) => !notebook.id.startsWith('creating-')
+      )
+    )
+  }, [loading, notebooks, user])
+
+  const markNotebookOpenedLocally = (notebookId: string) => {
+    const openedAt = new Date().toISOString()
+    const updatedNotebooks = notebooks.map((notebook) =>
+      notebook.id === notebookId
+        ? {
+            ...notebook,
+            last_opened_at: openedAt
+          }
+        : notebook
+    )
+
+    setNotebooks(updatedNotebooks)
+    if (user) {
+      writeNotebookSessionCache(user.id, updatedNotebooks)
+    }
+  }
+
   const handleCreateNotebook = async () => {
+    if (creationInProgressRef.current || !user) return
+    creationInProgressRef.current = true
+
+    const temporaryId = `creating-${crypto.randomUUID()}`
+    const createdAt = new Date().toISOString()
+    const optimisticNotebook: Notebook = {
+      id: temporaryId,
+      name: defaultNotebookName.trim() || 'My Notebook',
+      style: 'standard',
+      created_at: createdAt,
+      last_opened_at: createdAt,
+      revision: 0,
+      user_id: user.id,
+      latestPageId: null,
+      _count: {
+        pages: 1
+      }
+    }
+    const previousNotebooks = notebooks
+    const optimisticNotebooks = [
+      optimisticNotebook,
+      ...previousNotebooks
+    ]
+
+    setCreationError(null)
+    setIsCreatingNotebook(true)
+    setNotebooks(optimisticNotebooks)
+
     try {
       const notebookResponse = await fetch('/api/notebooks', {
         method: 'POST',
@@ -311,7 +458,8 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           name: defaultNotebookName.trim() || 'My Notebook',
-          style: 'standard'
+          style: 'standard',
+          createInitialPage: true
         })
       })
 
@@ -322,43 +470,28 @@ export default function DashboardPage() {
       }
 
       const notebook = await notebookResponse.json()
-
-      const pageResponse = await fetch(
-        `/api/notebooks/${notebook.id}/pages`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: 'Page 1',
-            content: {
-              type: 'doc',
-              content: []
-            },
-            page_number: 1
-          })
-        }
+      const reconciledNotebooks = optimisticNotebooks.map(
+        (item) =>
+          item.id === temporaryId
+            ? notebook
+            : item
       )
 
-      if (!pageResponse.ok) {
-        throw new Error(
-          'Failed to create first page'
-        )
-      }
-
-      const page = await pageResponse.json()
-
-      router.push(`/editor/${page.id}`)
+      setNotebooks(reconciledNotebooks)
+      writeNotebookSessionCache(user.id, reconciledNotebooks)
+      router.push(`/editor/${notebook.initialPageId}`)
     } catch (error) {
       console.error(
         'Error creating notebook:',
         error
       )
 
-      alert(
-        'Failed to create notebook. Check console for details.'
-      )
+      setNotebooks(previousNotebooks)
+      writeNotebookSessionCache(user.id, previousNotebooks)
+      setCreationError('Could not create the notebook. Please try again.')
+    } finally {
+      creationInProgressRef.current = false
+      setIsCreatingNotebook(false)
     }
   }
 
@@ -366,19 +499,36 @@ export default function DashboardPage() {
     notebookId: string
   ) => {
     try {
-      const response = await fetch(
-        `/api/notebooks/${notebookId}/latest-page`
+      const cachedNotebook = notebooks.find(
+        (notebook) => notebook.id === notebookId
       )
 
-      if (!response.ok) {
-        throw new Error(
-          'Failed to fetch latest page'
+      if (cachedNotebook?.latestPageId) {
+        markNotebookOpenedLocally(notebookId)
+        router.push(
+          `/editor/${cachedNotebook.latestPageId}`
         )
+        return
       }
 
-      const latestPage = await response.json()
+      let latestPage: { id: string } | null = null
+
+      if (cachedNotebook?.latestPageId === undefined) {
+        const response = await fetch(
+          `/api/notebooks/${notebookId}/latest-page`
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to fetch latest page'
+          )
+        }
+
+        latestPage = await response.json()
+      }
 
       if (latestPage) {
+        markNotebookOpenedLocally(notebookId)
         router.push(`/editor/${latestPage.id}`)
         return
       }
@@ -391,12 +541,15 @@ export default function DashboardPage() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            title: 'Page 1',
             content: {
               type: 'doc',
               content: []
             },
-            page_number: 1
+            page_number: 1,
+            expectedRevision:
+              notebooks.find(
+                (notebook) => notebook.id === notebookId
+              )?.revision ?? 0
           })
         }
       )
@@ -408,6 +561,7 @@ export default function DashboardPage() {
       const newPage =
         await newPageResponse.json()
 
+      markNotebookOpenedLocally(notebookId)
       router.push(`/editor/${newPage.id}`)
     } catch (error) {
       console.error(
@@ -419,6 +573,76 @@ export default function DashboardPage() {
     }
   }
 
+  const handleImportFiles = async (selectedFiles: File[]) => {
+    if (isImporting) return
+
+    setImportError(null)
+
+    const validFiles = selectedFiles
+      .filter(isSupportedImportFile)
+      .sort((left, right) =>
+        (
+          left.webkitRelativePath || left.name
+        ).localeCompare(
+          right.webkitRelativePath || right.name,
+          undefined,
+          { numeric: true, sensitivity: 'base' }
+        )
+      )
+
+    if (validFiles.length === 0) {
+      setImportError(
+        'Choose at least one TXT, Markdown, or PDF file.'
+      )
+      return
+    }
+
+    if (validFiles.length > MAX_IMPORT_FILES) {
+      setImportError(
+        `Import up to ${MAX_IMPORT_FILES} supported files at a time.`
+      )
+      return
+    }
+
+    const totalBytes = validFiles.reduce(
+      (total, file) => total + file.size,
+      0
+    )
+
+    if (totalBytes > MAX_IMPORT_TOTAL_BYTES) {
+      setImportError(
+        'The selected files must total 50 MB or less.'
+      )
+      return
+    }
+
+    setIsImporting(true)
+
+    try {
+      const documents = []
+
+      for (const file of validFiles) {
+        documents.push(await readImportedFile(file))
+      }
+
+      const firstPageId = await createNotebookFromImport(
+        notebookNameFromFiles(validFiles),
+        documents
+      )
+
+      router.push(`/editor/${firstPageId}`)
+    } catch (error) {
+      console.error('Failed to import notebook:', error)
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to import the selected files.'
+      )
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   const handleRenameNotebook = async (
     event: React.FormEvent,
     notebookId: string
@@ -427,6 +651,10 @@ export default function DashboardPage() {
     event.stopPropagation()
 
     const name = renameDraft.trim() || 'My Notebook'
+    const notebook = notebooks.find(
+      (currentNotebook) => currentNotebook.id === notebookId
+    )
+    if (!notebook) return
 
     try {
       const response = await fetch(
@@ -436,20 +664,29 @@ export default function DashboardPage() {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ name })
+          body: JSON.stringify({
+            name,
+            expectedRevision: notebook.revision
+          })
         }
       )
 
       if (!response.ok) {
         throw new Error('Failed to rename notebook')
       }
+      const nextRevision = Number(
+        response.headers.get(NOTEBOOK_REVISION_HEADER)
+      )
 
       setNotebooks((currentNotebooks) =>
         currentNotebooks.map((notebook) =>
           notebook.id === notebookId
             ? {
                 ...notebook,
-                name
+                name,
+                revision: Number.isSafeInteger(nextRevision)
+                  ? nextRevision
+                  : notebook.revision
               }
             : notebook
         )
@@ -477,15 +714,25 @@ export default function DashboardPage() {
     newTab.opener = null
 
     try {
-      const response = await fetch(
-        `/api/notebooks/${notebookId}/latest-page`
+      const cachedNotebook = notebooks.find(
+        (notebook) => notebook.id === notebookId
       )
+      let targetPage: { id: string } | null =
+        cachedNotebook?.latestPageId
+          ? { id: cachedNotebook.latestPageId }
+          : null
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch latest page')
+      if (cachedNotebook?.latestPageId === undefined) {
+        const response = await fetch(
+          `/api/notebooks/${notebookId}/latest-page`
+        )
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch latest page')
+        }
+
+        targetPage = await response.json()
       }
-
-      let targetPage = await response.json()
 
       if (!targetPage) {
         const newPageResponse = await fetch(
@@ -496,12 +743,15 @@ export default function DashboardPage() {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              title: 'Page 1',
               content: {
                 type: 'doc',
                 content: []
               },
-              page_number: 1
+              page_number: 1,
+              expectedRevision:
+                notebooks.find(
+                  (notebook) => notebook.id === notebookId
+                )?.revision ?? 0
             })
           }
         )
@@ -513,6 +763,11 @@ export default function DashboardPage() {
         targetPage = await newPageResponse.json()
       }
 
+      if (!targetPage) {
+        throw new Error('Notebook has no available page')
+      }
+
+      markNotebookOpenedLocally(notebookId)
       newTab.location.href = new URL(
         `/editor/${targetPage.id}`,
         window.location.origin
@@ -558,9 +813,96 @@ export default function DashboardPage() {
   }
 
   const handleLogout = async () => {
+    if (user) clearNotebookSessionCache(user.id)
+    sessionStorage.removeItem(LEGAL_CONSENT_SESSION_KEY)
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  const handleSendPasswordReset = async () => {
+    if (!user?.email) {
+      throw new Error('This account does not have an email address.')
+    }
+
+    const response = await fetch('/api/account/recovery/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: user.email,
+        website: ''
+      })
+    })
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null
+
+    if (!response.ok) {
+      throw new Error(
+        result?.error || 'A recovery link could not be requested.'
+      )
+    }
+  }
+
+  const handleDeleteAccount = async (confirmation: string) => {
+    const response = await fetch('/api/account', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ confirmation })
+    })
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null
+
+    if (!response.ok) {
+      throw new Error(result?.error || 'The account could not be deleted.')
+    }
+
+    if (user) clearNotebookSessionCache(user.id)
+
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index)
+      if (key?.startsWith('sentia:')) localStorage.removeItem(key)
+    }
+
+    for (
+      let index = sessionStorage.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      const key = sessionStorage.key(index)
+      if (key?.startsWith('sentia:')) sessionStorage.removeItem(key)
+    }
+
+    await clearStoredDirectoryHandles().catch((error) => {
+      console.warn('Unable to clear local folder settings:', error)
+    })
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    router.replace('/')
+    router.refresh()
+  }
+
+  const accountProviders = Array.isArray(
+    user?.app_metadata?.providers
+  )
+    ? user.app_metadata.providers.filter(
+        (provider): provider is string =>
+          typeof provider === 'string'
+      )
+    : typeof user?.app_metadata?.provider === 'string'
+      ? [user.app_metadata.provider]
+      : []
+  const canResetPassword = accountProviders.includes('email')
+  const accountProvider = accountProviders.includes('google')
+    ? canResetPassword
+      ? 'Google and email/password'
+      : 'Google'
+    : canResetPassword
+      ? 'Email and password'
+      : 'Supabase account'
 
   const normalizedNotebookSearch = notebookSearch
     .trim()
@@ -573,30 +915,30 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#080a0e] flex items-center justify-center px-6">
+      <div className="sentia-loading-screen min-h-screen bg-[#080a0e] flex items-center justify-center px-6">
         <div className="flex flex-col items-center">
           <div className="relative mb-6">
-            <div className="h-14 w-14 rounded-2xl border border-slate-800 bg-slate-900/80 shadow-2xl shadow-black/30" />
+            <div className="sentia-loading-card h-14 w-14 rounded-2xl border border-slate-800 bg-slate-900/80 shadow-2xl shadow-black/30" />
 
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-700 border-t-slate-400" />
+              <div className="sentia-loading-spinner h-6 w-6 animate-spin rounded-full border-2 border-slate-700 border-t-slate-400" />
             </div>
           </div>
 
-          <h1 className="text-lg font-semibold tracking-tight text-white">
-            Opening ScribeAI
+          <h1 className="sentia-loading-title text-lg font-semibold tracking-tight text-white">
+            Opening Sentia
           </h1>
 
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="sentia-loading-copy mt-2 text-sm text-gray-500">
             Loading your notebooks
           </p>
 
           <div className="mt-5 flex gap-1.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500" />
+            <span className="sentia-loading-dot h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500" />
 
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:150ms]" />
+            <span className="sentia-loading-dot h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:150ms]" />
 
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:300ms]" />
+            <span className="sentia-loading-dot h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:300ms]" />
           </div>
         </div>
       </div>
@@ -605,7 +947,7 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#080a0e] text-slate-100"
+      className="sentia-dashboard min-h-screen bg-[#080a0e] text-slate-100"
       onClick={() => {
         if (showDropdown) {
           setShowDropdown(false)
@@ -668,9 +1010,27 @@ export default function DashboardPage() {
 
           <div className="relative ml-auto">
             <button
+              ref={profileButtonRef}
+              type="button"
+              aria-label="Open account menu"
+              aria-haspopup="menu"
+              aria-expanded={showDropdown}
               onClick={(e) => {
                 e.stopPropagation()
                 setShowDropdown(!showDropdown)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowDown') return
+
+                event.preventDefault()
+                setShowDropdown(true)
+                window.requestAnimationFrame(() => {
+                  profileMenuRef.current
+                    ?.querySelector<HTMLElement>(
+                      '[role="menuitem"]'
+                    )
+                    ?.focus()
+                })
               }}
               className="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white transition-colors"
             >
@@ -685,9 +1045,17 @@ export default function DashboardPage() {
 
             {showDropdown && (
               <div
+                ref={profileMenuRef}
+                role="menu"
                 className="absolute right-0 mt-2 w-48 bg-[#11151c] border border-slate-700 rounded-lg shadow-xl shadow-black/30 py-1 z-50"
                 onClick={(e) =>
                   e.stopPropagation()
+                }
+                onKeyDown={(event) =>
+                  handleMenuKeyboardNavigation(event, () => {
+                    setShowDropdown(false)
+                    profileButtonRef.current?.focus()
+                  })
                 }
               >
                 <div className="px-4 py-2 border-b border-slate-700">
@@ -697,6 +1065,7 @@ export default function DashboardPage() {
                 </div>
 
                 <button
+                  role="menuitem"
                   onClick={() => {
                     setShowDropdown(false)
                     setShowFeedbackModal(true)
@@ -707,6 +1076,7 @@ export default function DashboardPage() {
                 </button>
 
                 <button
+                  role="menuitem"
                   onClick={() => {
                     setShowDropdown(false)
                     setShowSettingsModal(true)
@@ -717,6 +1087,7 @@ export default function DashboardPage() {
                 </button>
 
                 <button
+                  role="menuitem"
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer transition-colors duration-200"
                 >
@@ -750,17 +1121,68 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {importError && (
+          <div
+            role="alert"
+            className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-amber-900/80 bg-amber-950/50 px-4 py-3 text-sm text-amber-100"
+          >
+            <span>{importError}</span>
+
+            <button
+              type="button"
+              onClick={() => setImportError(null)}
+              className="shrink-0 rounded px-2 py-1 text-amber-100 hover:bg-amber-900/60"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {creationError && (
+          <div
+            role="alert"
+            className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-red-900 bg-red-950/70 px-4 py-3 text-sm text-red-200"
+          >
+            <span>{creationError}</span>
+            <button
+              type="button"
+              onClick={() => setCreationError(null)}
+              className="shrink-0 rounded px-2 py-1 text-red-100 hover:bg-red-900"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {notebooks.length > 0 && (
           <div className="mb-8 flex items-center justify-between gap-4">
-            <button
-              onClick={handleCreateNotebook}
-              className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-5 py-2 font-medium text-slate-50 shadow-sm cursor-pointer transition-colors hover:bg-slate-600"
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-600 text-base font-light leading-none">
-                +
-              </span>
-              Create New Notebook
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleCreateNotebook}
+                disabled={isImporting || isCreatingNotebook}
+                className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-5 py-2 font-medium text-slate-50 shadow-sm cursor-pointer transition-colors hover:bg-slate-600 disabled:cursor-wait disabled:opacity-60"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-600 text-base font-light leading-none">
+                  +
+                </span>
+                {isCreatingNotebook
+                  ? 'Creating Notebook…'
+                  : 'Create New Notebook'}
+              </button>
+
+              <DashboardImportControls
+                isImporting={isImporting}
+                onImport={(files) => void handleImportFiles(files)}
+              />
+
+              <button
+                type="button"
+                onClick={() => router.push('/quiz')}
+                className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-700 bg-[#11151c] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+              >
+                Quiz
+              </button>
+            </div>
 
             <button
               type="button"
@@ -793,16 +1215,43 @@ export default function DashboardPage() {
           {filteredNotebooks.map((notebook) => (
             <div
               key={notebook.id}
-              className={`group relative overflow-visible rounded-xl border border-slate-800 bg-[#11151c] shadow-sm shadow-black/20 cursor-pointer transition-all duration-200 before:absolute before:inset-y-4 before:left-0 before:w-px before:bg-slate-600/60 hover:-translate-y-0.5 hover:border-slate-600 hover:shadow-lg hover:shadow-black/25 ${
+              role="link"
+              tabIndex={
+                notebook.id.startsWith('creating-') ? -1 : 0
+              }
+              aria-disabled={notebook.id.startsWith('creating-')}
+              aria-label={`Open ${notebook.name}`}
+              className={`sentia-notebook-card group relative overflow-visible rounded-md border border-slate-800 bg-[#11151c] shadow-sm shadow-black/20 cursor-pointer transition-all duration-200 before:absolute before:inset-y-4 before:left-0 before:w-px before:bg-slate-600/60 hover:-translate-y-0.5 hover:border-slate-600 hover:shadow-md hover:shadow-black/20 ${
                 listView ? 'min-h-24 p-4' : 'p-6'
               }`}
-              onClick={() =>
-                handleNotebookClick(notebook.id)
-              }
+              onClick={() => {
+                if (!notebook.id.startsWith('creating-')) {
+                  void handleNotebookClick(notebook.id)
+                }
+              }}
+              onKeyDown={(event) => {
+                if (notebook.id.startsWith('creating-')) return
+
+                if (
+                  event.target !== event.currentTarget ||
+                  !['Enter', ' '].includes(event.key)
+                ) {
+                  return
+                }
+
+                event.preventDefault()
+                void handleNotebookClick(notebook.id)
+              }}
             >
-              <button
+              {!notebook.id.startsWith('creating-') && <button
                 type="button"
                 aria-label={`Options for ${notebook.name}`}
+                aria-haspopup="menu"
+                aria-expanded={
+                  activeNotebookMenuId === notebook.id
+                }
+                aria-controls={`notebook-menu-${notebook.id}`}
+                data-notebook-options={notebook.id}
                 className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-xl leading-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-100"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -813,17 +1262,48 @@ export default function DashboardPage() {
                       : notebook.id
                   )
                 }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowDown') return
+
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setShowDropdown(false)
+                  setActiveNotebookMenuId(notebook.id)
+                  window.requestAnimationFrame(() => {
+                    document
+                      .getElementById(
+                        `notebook-menu-${notebook.id}`
+                      )
+                      ?.querySelector<HTMLElement>(
+                        '[role="menuitem"]'
+                      )
+                      ?.focus()
+                  })
+                }}
               >
                 ⋯
-              </button>
+              </button>}
 
               {activeNotebookMenuId === notebook.id && (
                 <div
+                  id={`notebook-menu-${notebook.id}`}
+                  role="menu"
                   className="absolute right-3 top-11 z-30 w-40 rounded-lg border border-slate-700 bg-[#0d1117] py-0.5 shadow-xl shadow-black/30"
                   onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) =>
+                    handleMenuKeyboardNavigation(event, () => {
+                      setActiveNotebookMenuId(null)
+                      document
+                        .querySelector<HTMLElement>(
+                          `[data-notebook-options="${notebook.id}"]`
+                        )
+                        ?.focus()
+                    })
+                  }
                 >
                   <button
                     type="button"
+                    role="menuitem"
                     className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
                     onClick={() => {
                       setRenamingNotebookId(notebook.id)
@@ -837,6 +1317,7 @@ export default function DashboardPage() {
 
                   <button
                     type="button"
+                    role="menuitem"
                     className="w-full px-3 py-1.5 text-left text-sm text-red-300 hover:bg-slate-800"
                     onClick={() => {
                       setNotebookToDelete(notebook)
@@ -848,6 +1329,7 @@ export default function DashboardPage() {
 
                   <button
                     type="button"
+                    role="menuitem"
                     className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
                     onClick={() => {
                       setActiveNotebookMenuId(null)
@@ -869,11 +1351,19 @@ export default function DashboardPage() {
                 >
                   <input
                     autoFocus
+                    aria-label={`Rename ${notebook.name}`}
                     value={renameDraft}
                     maxLength={100}
                     onChange={(event) =>
                       setRenameDraft(event.target.value)
                     }
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape') return
+
+                      setRenamingNotebookId(null)
+                      setRenameDraft('')
+                      setRenameError(null)
+                    }}
                     className="w-full rounded border border-slate-600 bg-[#0d1117] px-2 py-1 text-sm text-white outline-none focus:border-slate-400"
                   />
 
@@ -911,7 +1401,9 @@ export default function DashboardPage() {
               )}
 
               <p className="text-slate-500 text-sm">
-                {formatNotebookDate(notebook)}
+                {notebook.id.startsWith('creating-')
+                  ? 'Creating…'
+                  : formatNotebookDate(notebook)}
               </p>
 
               <span className="inline-block mt-3 rounded-md border border-slate-700/70 bg-slate-800/60 px-2 py-1 text-xs text-slate-400">
@@ -946,256 +1438,59 @@ export default function DashboardPage() {
 
               <button
                 onClick={handleCreateNotebook}
+                disabled={isCreatingNotebook}
                 className="rounded-lg border border-slate-600 bg-slate-700 px-8 py-3 text-lg font-medium text-slate-50 shadow-sm cursor-pointer transition-colors hover:bg-slate-600"
               >
-                Create Your First Notebook
+                {isCreatingNotebook
+                  ? 'Creating Notebook…'
+                  : 'Create Your First Notebook'}
               </button>
+
+              <div className="mt-3">
+                <DashboardImportControls
+                  isImporting={isImporting}
+                  onImport={(files) => void handleImportFiles(files)}
+                />
+              </div>
             </div>
           )}
         </div>
       </main>
 
       {showSettingsModal && (
-        <div
-          role="presentation"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowSettingsModal(false)
-            }
+        <DashboardSettingsModal
+          accountProvider={accountProvider}
+          canResetPassword={canResetPassword}
+          darkEditorPaper={darkEditorPaper}
+          defaultNotebookName={defaultNotebookName}
+          userEmail={user?.email}
+          onClose={() => setShowSettingsModal(false)}
+          onDefaultNotebookNameChange={(name) => {
+            setDefaultNotebookName(name)
+            localStorage.setItem(
+              DEFAULT_NOTEBOOK_NAME_KEY,
+              name
+            )
           }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dashboard-settings-title"
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-700 bg-[#11151c] p-6 shadow-2xl shadow-black/40"
-          >
-            <div className="flex items-start justify-between gap-6 border-b border-slate-800 pb-4">
-              <div>
-                <h2
-                  id="dashboard-settings-title"
-                  className="text-lg font-semibold tracking-tight text-slate-50"
-                >
-                  Settings
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Dashboard and notebook preferences.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Close settings"
-                onClick={() => setShowSettingsModal(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-lg text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-100"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-800">
-              <section className="py-5">
-                <div className="rounded-lg border border-sky-900/60 bg-sky-950/20 p-4">
-                  <div className="flex items-center justify-between gap-5">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xs font-medium uppercase tracking-wider text-sky-300">
-                          Tutorial
-                        </h3>
-                        <span className="rounded border border-sky-800/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-sky-400">
-                          Essential
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm font-medium text-slate-100">
-                        Learn every ScribeAI workflow
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-slate-400">
-                        A complete guided tour of notebooks, pages, editing, commands, recovery, and account tools.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSettingsModal(false)
-                        setShowTutorialModal(true)
-                      }}
-                      className="shrink-0 rounded-md border border-sky-800/70 bg-sky-950/40 px-3 py-2 text-sm text-sky-200 transition-colors hover:bg-sky-900/40 hover:text-sky-100"
-                    >
-                      Start
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="py-5">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                  Account
-                </h3>
-
-                <div className="mt-3 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-300">
-                      Signed in as
-                    </p>
-                    <p className="truncate text-sm font-medium text-slate-100">
-                      {user?.email}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsModal(false)
-                      void handleLogout()
-                    }}
-                    className="shrink-0 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </section>
-
-              <section className="py-5">
-                <label
-                  htmlFor="default-notebook-name"
-                  className="text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  New Notebooks
-                </label>
-
-                <div className="mt-3 flex items-center justify-between gap-5">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">
-                      Default notebook name
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Used as the starting name for new notebooks.
-                    </p>
-                  </div>
-
-                  <input
-                    id="default-notebook-name"
-                    type="text"
-                    value={defaultNotebookName}
-                    maxLength={100}
-                    onChange={(event) => {
-                      const nextName = event.target.value
-                      setDefaultNotebookName(nextName)
-                      localStorage.setItem(
-                        DEFAULT_NOTEBOOK_NAME_KEY,
-                        nextName
-                      )
-                    }}
-                    className="w-44 rounded-md border border-slate-700 bg-[#0d1117] px-3 py-2 text-sm text-slate-200 outline-none focus:border-slate-500"
-                  />
-                </div>
-              </section>
-
-              <section className="py-5">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                  Editor Paper
-                </h3>
-
-                <div className="mt-3 flex items-center justify-between gap-5">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">
-                      Writing surface
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Choose a light or VS Code-style dark page.
-                    </p>
-                  </div>
-
-                  <div
-                    role="radiogroup"
-                    aria-label="Editor paper theme"
-                    className="flex shrink-0 rounded-md border border-slate-700 bg-[#0d1117] p-1"
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={!darkEditorPaper}
-                      onClick={() => {
-                        setDarkEditorPaper(false)
-                        localStorage.setItem(
-                          EDITOR_PAPER_THEME_KEY,
-                          'light'
-                        )
-                      }}
-                      className={`rounded px-3 py-1.5 text-xs transition-colors ${
-                        !darkEditorPaper
-                          ? 'bg-slate-700 text-white'
-                          : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      Light
-                    </button>
-
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={darkEditorPaper}
-                      onClick={() => {
-                        setDarkEditorPaper(true)
-                        localStorage.setItem(
-                          EDITOR_PAPER_THEME_KEY,
-                          'dark'
-                        )
-                      }}
-                      className={`rounded px-3 py-1.5 text-xs transition-colors ${
-                        darkEditorPaper
-                          ? 'bg-slate-700 text-white'
-                          : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      Dark
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="py-5">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                  Feedback &amp; Support
-                </h3>
-
-                <div className="mt-3 flex items-center justify-between gap-5">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">
-                      Help improve ScribeAI
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Report bugs, suggest ideas, and track your submissions.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsModal(false)
-                      setShowFeedbackModal(true)
-                    }}
-                    className="shrink-0 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-                  >
-                    Open Feedback
-                  </button>
-                </div>
-              </section>
-            </div>
-
-            <div className="flex justify-end border-t border-slate-800 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowSettingsModal(false)}
-                className="rounded-md border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-600"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
+          onDeleteAccount={handleDeleteAccount}
+          onOpenFeedback={() => {
+            setShowSettingsModal(false)
+            setShowFeedbackModal(true)
+          }}
+          onOpenTutorial={() => {
+            setShowSettingsModal(false)
+            setShowTutorialModal(true)
+          }}
+          onSendPasswordReset={handleSendPasswordReset}
+          onSignOut={() => {
+            setShowSettingsModal(false)
+            void handleLogout()
+          }}
+          onThemeChange={(dark) => {
+            setDarkEditorPaper(dark)
+            saveAppTheme(dark ? 'dark' : 'light')
+          }}
+        />
       )}
 
       <FeedbackModal
@@ -1213,63 +1508,21 @@ export default function DashboardPage() {
       />
 
       {notebookToDelete && (
-        <div
-          role="presentation"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
-          onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget &&
-              !isDeletingNotebook
-            ) {
-              setNotebookToDelete(null)
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-dashboard-notebook-title"
-            aria-describedby="delete-dashboard-notebook-description"
-            className="w-full max-w-md rounded-xl border border-slate-700 bg-[#11151c] p-6 shadow-2xl shadow-black/40"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2
-              id="delete-dashboard-notebook-title"
-              className="text-xl font-bold text-gray-50"
-            >
-              Delete Notebook
-            </h2>
-
-            <p
-              id="delete-dashboard-notebook-description"
-              className="mt-3 leading-6 text-gray-300"
-            >
-              Delete “{notebookToDelete.name}”? This cannot be undone.
-            </p>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                disabled={isDeletingNotebook}
-                onClick={() => setNotebookToDelete(null)}
-                className="rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                autoFocus
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={isDeletingNotebook}
-                onClick={() => void handleConfirmNotebookDelete()}
-                className="rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-red-200 hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDeletingNotebook ? 'Deleting...' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteNotebookModal
+          isDeleting={isDeletingNotebook}
+          notebookName={notebookToDelete.name}
+          onCancel={() => setNotebookToDelete(null)}
+          onConfirm={() => void handleConfirmNotebookDelete()}
+        />
       )}
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <LegalConsentGate>
+      <DashboardPageContent />
+    </LegalConsentGate>
   )
 }

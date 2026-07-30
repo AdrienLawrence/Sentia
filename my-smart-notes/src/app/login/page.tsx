@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import {
+  LEGAL_CONSENT_SESSION_KEY
+} from '@/features/legal/constants'
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -13,15 +16,23 @@ export default function LoginPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
+    sessionStorage.removeItem(LEGAL_CONSENT_SESSION_KEY)
     const searchParams = new URLSearchParams(window.location.search)
 
     if (searchParams.get('oauth') === 'failed') {
       setError('Google sign-in could not be completed. Please try again.')
+      window.history.replaceState({}, '', '/login')
+    } else if (searchParams.get('confirmation') === 'failed') {
+      setError(
+        'That confirmation link is invalid or expired. Enter your email and request a new one below.'
+      )
       window.history.replaceState({}, '', '/login')
     }
   }, [])
@@ -29,6 +40,7 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true)
     setError('')
+    setNotice('')
 
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -52,10 +64,49 @@ export default function LoginPage() {
     }
   }
 
+  const handleResendConfirmation = async () => {
+    const normalizedEmail = email.trim()
+
+    setError('')
+    setNotice('')
+
+    if (!normalizedEmail) {
+      setError('Enter your email address before requesting a new link.')
+      return
+    }
+
+    setResendLoading(true)
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: normalizedEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`
+        }
+      })
+
+      if (error) throw error
+
+      setNotice(
+        'If that address has an unconfirmed account, a new confirmation link has been sent.'
+      )
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'A new confirmation link could not be sent.'
+      )
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setNotice('')
 
     // Password confirmation check
     if (!isLogin && password !== confirmPassword) {
@@ -74,14 +125,26 @@ export default function LoginPage() {
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email, password
+          email: email.trim(),
+          password
         })
         if (error) throw error
       } else {
-        const { error } = await supabase.auth.signUp({
-          email, password
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/confirm`
+          }
         })
         if (error) throw error
+
+        if (!data.session) {
+          setNotice(
+            'Check your email to confirm your account. You can request a new link below if it expires.'
+          )
+          return
+        }
       }
       
       router.push('/dashboard')
@@ -102,7 +165,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-50 mb-2">
-            {isLogin ? 'Welcome Back' : 'Join ScribeAI'}
+            {isLogin ? 'Welcome Back' : 'Join Sentia'}
           </h1>
           <p className="text-slate-500">
             {isLogin ? 'Ready to jump back in?' : 'Create your account to get started'}
@@ -116,10 +179,23 @@ export default function LoginPage() {
           </div>
         )}
 
+        {notice && (
+          <div
+            role="status"
+            className="sentia-auth-notice mb-6 rounded-lg border border-sky-900/70 bg-sky-950/40 px-4 py-3 text-sm text-sky-200"
+          >
+            {notice}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => void handleGoogleSignIn()}
-          disabled={loading || googleLoading}
+          disabled={
+            loading ||
+            googleLoading ||
+            resendLoading
+          }
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-700 bg-[#11151c] px-4 py-3 font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <svg
@@ -201,12 +277,33 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || googleLoading}
+            disabled={
+              loading ||
+              googleLoading ||
+              resendLoading
+            }
             className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-3 font-medium text-slate-50 shadow-sm transition-colors cursor-pointer hover:bg-slate-600 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-800 disabled:text-slate-500"
           >
             {loading ? 'Loading...' : (isLogin ? 'Sign In' : 'Create Account')}
           </button>
         </form>
+
+        {isLogin && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => router.push('/forgot-password')}
+              disabled={
+                loading ||
+                googleLoading ||
+                resendLoading
+              }
+              className="text-sm text-slate-500 underline decoration-slate-700 underline-offset-4 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
 
         {/* Toggle between login/signup */}
         <div className="text-center mt-6">
@@ -214,6 +311,7 @@ export default function LoginPage() {
             onClick={() => {
               setIsLogin(!isLogin)
               setError('')
+              setNotice('')
               setConfirmPassword('')
             }}
             className="text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
@@ -221,6 +319,41 @@ export default function LoginPage() {
             {isLogin ? "Need an account? Sign up" : "Already have an account? Sign in"}
           </button>
         </div>
+
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => void handleResendConfirmation()}
+            disabled={
+              loading ||
+              googleLoading ||
+              resendLoading
+            }
+            className="text-sm text-slate-500 underline decoration-slate-700 underline-offset-4 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {resendLoading
+              ? 'Sending confirmation link…'
+              : 'Resend confirmation email'}
+          </button>
+        </div>
+
+        <p className="mt-6 text-center text-xs leading-5 text-slate-500">
+          By continuing, you will be asked to review Sentia&apos;s{' '}
+          <a
+            href="/privacy"
+            className="text-slate-400 underline hover:text-slate-200"
+          >
+            Privacy Policy
+          </a>{' '}
+          and{' '}
+          <a
+            href="/terms"
+            className="text-slate-400 underline hover:text-slate-200"
+          >
+            Terms of Service
+          </a>
+          .
+        </p>
       </div>
     </div>
   )

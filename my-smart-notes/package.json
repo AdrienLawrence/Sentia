@@ -6,7 +6,13 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "validate": "npm run lint && npm run typecheck",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/register-hooks.mjs --test --test-concurrency=1 tests/*.test.ts",
+    "test:coverage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/register-hooks.mjs --experimental-test-coverage --test-coverage-exclude=tests/** --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=60 --test --test-concurrency=1 tests/*.test.ts",
+    "test:ai:live": "node --env-file-if-exists=.env scripts/live-ai-safety-eval.mjs",
+    "check": "npm run validate && npm run test:coverage"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -17,7 +23,9 @@
     "@tiptap/extension-text-style": "^3.13.0",
     "@tiptap/react": "^3.6.2",
     "@tiptap/starter-kit": "^3.6.2",
+    "jspdf": "^4.2.1",
     "next": "15.5.21",
+    "pdfjs-dist": "^6.1.200",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zustand": "^5.0.8"

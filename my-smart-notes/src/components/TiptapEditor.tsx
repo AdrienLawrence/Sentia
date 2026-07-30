@@ -2,7 +2,7 @@
 'use client'
 
 import { useEditor, EditorContent } from '@tiptap/react'
-import type { Editor } from '@tiptap/core'
+import type { Editor, JSONContent } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import { TextAlign } from '@tiptap/extension-text-align'
@@ -15,8 +15,16 @@ import {
 import { EditorToolbar } from './editor/EditorToolbar'
 import ListManager from './editor/listManager'
 import { useEffect, useRef, useState } from 'react'
+import {
+  markdownToTiptapDocument
+} from '@/features/file-transfer/lib/content'
 
 interface EditorInsertRequest {
+  id: string
+  text: string
+}
+
+interface EditorHighlightRequest {
   id: string
   text: string
 }
@@ -31,14 +39,16 @@ interface EditorReplaceRequest {
   id: string
   sourceMessageId: string
   target: 'page' | 'selection'
-  text: string
+  text?: string
+  content?: JSONContent
   selection?: EditorSelectionSnapshot
 }
 
 interface TiptapEditorProps {
-  content?: any
-  onUpdate?: (content: any) => void
+  content?: JSONContent
+  onUpdate?: (content: JSONContent) => void
   editable?: boolean
+  highlightRequest?: EditorHighlightRequest | null
   insertRequest?: EditorInsertRequest | null
   replaceRequest?: EditorReplaceRequest | null
   onSelectionChange?: (
@@ -89,6 +99,76 @@ function getSelectedTextBlocks(editor: Editor) {
   )
 
   return blocks
+}
+
+function findTextSelection(editor: Editor, searchText: string) {
+  const normalizedSearch = searchText
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!normalizedSearch) return null
+
+  const characters: string[] = []
+  const positions: Array<{ from: number; to: number }> = []
+
+  const appendCharacter = (
+    character: string,
+    from: number,
+    to: number
+  ) => {
+    const normalizedCharacter = /\s/.test(character)
+      ? ' '
+      : character
+
+    if (
+      normalizedCharacter === ' ' &&
+      characters[characters.length - 1] === ' '
+    ) {
+      positions[positions.length - 1].to = to
+      return
+    }
+
+    characters.push(normalizedCharacter)
+    positions.push({ from, to })
+  }
+
+  editor.state.doc.descendants((node, position) => {
+    if (!node.isTextblock) return
+
+    if (characters.length > 0) {
+      appendCharacter(' ', position, position + 1)
+    }
+
+    node.descendants((child, childPosition) => {
+      if (child.isText && child.text) {
+        for (let index = 0; index < child.text.length; index += 1) {
+          const character = child.text[index]
+          const from = position + 1 + childPosition + index
+          appendCharacter(character, from, from + 1)
+        }
+      } else if (child.type.name === 'hardBreak') {
+        const from = position + 1 + childPosition
+        appendCharacter(' ', from, from + child.nodeSize)
+      }
+    })
+  })
+
+  const normalizedDocument = characters.join('')
+  let search = normalizedSearch
+  let start = normalizedDocument.indexOf(search)
+
+  while (start === -1 && search.length > 80) {
+    search = search.slice(0, Math.floor(search.length * 0.75)).trim()
+    start = normalizedDocument.indexOf(search)
+  }
+
+  if (start === -1) return null
+
+  const end = start + search.length - 1
+  return {
+    from: positions[start].from,
+    to: positions[end].to
+  }
 }
 
 function indentSelection(editor: Editor) {
@@ -144,6 +224,7 @@ export function TiptapEditor({
   content,
   onUpdate,
   editable = true,
+  highlightRequest,
   insertRequest,
   replaceRequest,
   onSelectionChange,
@@ -151,6 +232,7 @@ export function TiptapEditor({
 }: TiptapEditorProps) {
   const [isMounted, setIsMounted] = useState(false)
   const lastInsertRequestIdRef = useRef<string | null>(null)
+  const lastHighlightRequestIdRef = useRef<string | null>(null)
   const lastReplaceRequestIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -171,11 +253,9 @@ export function TiptapEditor({
     ],
     content: content || '<p>Start typing...</p>',
     onUpdate: ({ editor }) => {
-      console.log('TiptapEditor: onUpdate fired')
       onUpdate?.(editor.getJSON())
     },
     onSelectionUpdate: ({ editor }) => {
-      console.log('TiptapEditor: onSelectionUpdate fired')
       const { from, to, empty } = editor.state.selection
 
       onSelectionChange?.(
@@ -195,6 +275,31 @@ export function TiptapEditor({
     editable,
     immediatelyRender: false,
   })
+
+  useEffect(() => {
+    if (
+      !editor ||
+      !highlightRequest ||
+      lastHighlightRequestIdRef.current === highlightRequest.id
+    ) {
+      return
+    }
+
+    lastHighlightRequestIdRef.current = highlightRequest.id
+    const selection = findTextSelection(
+      editor,
+      highlightRequest.text
+    )
+
+    if (!selection) return
+
+    editor
+      .chain()
+      .focus()
+      .setTextSelection(selection)
+      .scrollIntoView()
+      .run()
+  }, [editor, highlightRequest])
 
   useEffect(() => {
     if (
@@ -227,9 +332,15 @@ export function TiptapEditor({
     }
 
     lastReplaceRequestIdRef.current = replaceRequest.id
-    const paragraphs = textToParagraphs(replaceRequest.text)
+    const replacementContent =
+      replaceRequest.content ??
+      markdownToTiptapDocument(replaceRequest.text ?? '')
+    const replacementNodes = replacementContent.content ?? []
 
-    if (paragraphs.length === 0) {
+    if (
+      replaceRequest.target === 'selection' &&
+      replacementNodes.length === 0
+    ) {
       onReplaceResult?.(replaceRequest.sourceMessageId, false)
       return
     }
@@ -259,16 +370,20 @@ export function TiptapEditor({
           from: selection.from,
           to: selection.to
         })
-        .insertContent(paragraphs)
+        .insertContent(replacementNodes)
         .run()
     } else {
       editor
         .chain()
         .focus()
-        .setContent({
-          type: 'doc',
-          content: paragraphs
-        })
+        .setContent(
+          replacementNodes.length > 0
+            ? replacementContent
+            : {
+                type: 'doc',
+                content: [{ type: 'paragraph' }]
+              }
+        )
         .run()
     }
 
@@ -306,13 +421,6 @@ export function TiptapEditor({
     
     return () => {
       editorElement.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [editor])
-
-  // Log when editor is created
-  useEffect(() => {
-    if (editor) {
-      console.log('TiptapEditor: Editor instance created')
     }
   }, [editor])
 

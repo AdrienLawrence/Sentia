@@ -24,7 +24,7 @@ interface ShowcaseStep {
 const SHOWCASE_STEPS: ShowcaseStep[] = [
   {
     label: 'Welcome',
-    title: 'Meet your ScribeAI editor',
+    title: 'Meet your Sentia editor',
     description:
       'This first-use showcase points out the real controls you will use while writing. Move through every step to finish onboarding.',
     detail:
@@ -116,7 +116,7 @@ const SHOWCASE_STEPS: ShowcaseStep[] = [
     description:
       'You have seen the complete editor workflow. Finish this step to unlock the editor and remember onboarding on this browser.',
     detail:
-      'For a deeper reference covering the dashboard, feedback, account tools, and every command, open the full ScribeAI Tutorial in Settings.'
+      'For a deeper reference covering the dashboard, feedback, account tools, and every command, open the full Sentia Tutorial in Settings.'
   }
 ]
 

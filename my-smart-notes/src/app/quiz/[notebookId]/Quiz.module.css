@@ -224,6 +224,210 @@
   margin: 24px auto 0;
 }
 
+.quizSetup {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  border: 1px solid #343e49;
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(48, 67, 89, 0.2), transparent 42%),
+    #1d232a;
+  padding: clamp(24px, 4vw, 38px);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+.setupIntro {
+  max-width: 560px;
+  margin-bottom: 30px;
+}
+
+.setupIntro > span {
+  color: #91a4b8;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.setupIntro h2 {
+  margin: 5px 0 8px;
+  font-size: 25px;
+  font-weight: 500;
+}
+
+.setupIntro p {
+  margin: 0;
+  color: #aeb9c5;
+  line-height: 1.55;
+}
+
+.setupGrid {
+  display: grid;
+  gap: 25px;
+}
+
+.optionGroup {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.optionGroup legend {
+  margin-bottom: 9px;
+  color: #9dacbb;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.optionCards,
+.scopeOptions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scopeOptions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.optionCards button,
+.scopeOptions button {
+  min-height: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #394653;
+  border-radius: 8px;
+  background: #171c22;
+  color: #dce4ec;
+  padding: 11px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.optionCards button:hover:not(:disabled),
+.scopeOptions button:hover:not(:disabled) {
+  border-color: #60778f;
+  background: #202a34;
+  transform: translateY(-1px);
+}
+
+.optionCards button:disabled,
+.scopeOptions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.optionCards button strong,
+.scopeOptions button strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.optionCards button span,
+.scopeOptions button span {
+  color: #8493a2;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.optionCards .optionActive,
+.scopeOptions .optionActive {
+  border-color: #7997b5;
+  background: #27394a;
+  box-shadow: inset 0 0 0 1px rgba(121, 151, 181, 0.18);
+}
+
+.optionCards .optionActive span,
+.scopeOptions .optionActive span {
+  color: #b4c5d5;
+}
+
+.setupGenerateButton {
+  display: block;
+  min-width: 220px;
+  margin: 30px auto 0;
+  border: 1px solid #647f9a;
+  border-radius: 7px;
+  background: #344b62;
+  color: #f4f8fb;
+  padding: 11px 18px;
+  font: 13px var(--font-roboto-condensed), 'Arial Narrow', sans-serif;
+  cursor: pointer;
+}
+
+.setupGenerateButton:hover {
+  background: #405b75;
+}
+
+.setupGenerateButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hubLabel {
+  display: block;
+  margin-bottom: 9px;
+  color: #9dacbb;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hubSelect {
+  width: 100%;
+  border: 1px solid #394653;
+  border-radius: 8px;
+  background: #171c22;
+  color: #dce4ec;
+  padding: 12px;
+  font: 14px var(--font-roboto-condensed), 'Arial Narrow', sans-serif;
+}
+
+.hubSelect:focus-visible {
+  border-color: #7997b5;
+  outline: 2px solid rgba(121, 151, 181, 0.3);
+  outline-offset: 2px;
+}
+
+.hubStatus,
+.hubEmptyState {
+  color: #aeb9c5;
+}
+
+.hubError {
+  color: #f0a6a6;
+}
+
+.hubEmptyState p {
+  margin: 0;
+  text-align: center;
+}
+
+.quizConfigSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.quizConfigSummary span {
+  border: 1px solid #3c4a58;
+  border-radius: 999px;
+  background: #202832;
+  color: #aebdcc;
+  padding: 3px 7px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+
 @media (max-width: 650px) {
   .header {
     grid-template-columns: 1fr 1fr;
@@ -234,4 +438,103 @@
     grid-row: 1;
   }
 
+  .optionCards {
+    grid-template-columns: 1fr;
+  }
+
+  .scopeOptions {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+:global(html[data-app-theme='light']) .page {
+  background: var(--sentia-light-canvas);
+  color: var(--sentia-light-text);
+  scrollbar-color: #8faac8 var(--sentia-light-canvas);
+}
+
+:global(html[data-app-theme='light']) .header {
+  border-color: var(--sentia-light-border);
+}
+
+:global(html[data-app-theme='light']) .quizSetup,
+:global(html[data-app-theme='light']) .questionCard,
+:global(html[data-app-theme='light']) .emptyState {
+  border-color: var(--sentia-light-border);
+  background: var(--sentia-light-surface);
+  box-shadow: none;
+}
+
+:global(html[data-app-theme='light']) .optionCards button,
+:global(html[data-app-theme='light']) .scopeOptions button,
+:global(html[data-app-theme='light']) .choices button,
+:global(html[data-app-theme='light']) .hubSelect {
+  border-color: var(--sentia-light-border-strong);
+  background: var(--sentia-light-surface-soft);
+  color: var(--sentia-light-text);
+}
+
+:global(html[data-app-theme='light']) .optionCards .optionActive,
+:global(html[data-app-theme='light']) .scopeOptions .optionActive,
+:global(html[data-app-theme='light']) .choices .selectedChoice {
+  border-color: #7396c1;
+  background: #d9e8f8;
+}
+
+:global(html[data-app-theme='light']) .optionCards button:hover:not(:disabled),
+:global(html[data-app-theme='light']) .scopeOptions button:hover:not(:disabled) {
+  border-color: var(--sentia-light-border-strong);
+  background: var(--sentia-light-accent-soft);
+}
+
+:global(html[data-app-theme='light']) .setupIntro p,
+:global(html[data-app-theme='light']) .optionCards button span,
+:global(html[data-app-theme='light']) .scopeOptions button span,
+:global(html[data-app-theme='light']) .hubStatus,
+:global(html[data-app-theme='light']) .hubEmptyState,
+:global(html[data-app-theme='light']) .explanation p {
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .quizConfigSummary span {
+  border-color: var(--sentia-light-border);
+  background: var(--sentia-light-control);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .backButton {
+  border-color: var(--sentia-light-border-strong);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .generateButton,
+:global(html[data-app-theme='light']) .setupGenerateButton,
+:global(html[data-app-theme='light']) .submitButton {
+  border-color: #3f6191;
+  background: var(--sentia-light-accent);
+  color: #ffffff;
+}
+
+:global(html[data-app-theme='light']) .generateButton:hover,
+:global(html[data-app-theme='light']) .setupGenerateButton:hover,
+:global(html[data-app-theme='light']) .submitButton:hover {
+  background: var(--sentia-light-accent-hover);
+}
+
+:global(html[data-app-theme='light']) .choices button > span {
+  background: var(--sentia-light-control);
+  color: var(--sentia-light-text-secondary);
+}
+
+:global(html[data-app-theme='light']) .choices .correctChoice {
+  border-color: #6f9b82;
+  background: #dcebe2;
+  color: #244433;
+}
+
+:global(html[data-app-theme='light']) .choices .incorrectChoice {
+  border-color: #b77b7b;
+  background: #f1dddd;
+  color: #5c2f2f;
 }

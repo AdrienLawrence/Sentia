@@ -1,6 +1,13 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
+
+import { useDialogKeyboard } from '@/lib/accessibility/useDialogKeyboard'
 
 type FeedbackCategory =
   | 'bug'
@@ -44,6 +51,7 @@ export function FeedbackModal({
   email,
   onClose
 }: FeedbackModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
   const [category, setCategory] =
     useState<FeedbackCategory>('experience')
   const [message, setMessage] = useState('')
@@ -56,6 +64,13 @@ export function FeedbackModal({
   const [history, setHistory] = useState<FeedbackItem[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+
+  useDialogKeyboard({
+    closeOnEscape: false,
+    dialogRef,
+    isOpen,
+    onClose
+  })
 
   useEffect(() => {
     if (!isOpen) return
@@ -184,6 +199,7 @@ export function FeedbackModal({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-title"
@@ -196,7 +212,7 @@ export function FeedbackModal({
                 id="feedback-title"
                 className="text-lg font-semibold tracking-tight text-slate-50"
               >
-                Help shape ScribeAI
+                Help shape Sentia
               </h2>
               <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
                 Feedback
@@ -278,7 +294,7 @@ export function FeedbackModal({
                 maxLength={2000}
                 rows={7}
                 required
-                placeholder="What happened, what did you expect, or what would make ScribeAI better?"
+                placeholder="What happened, what did you expect, or what would make Sentia better?"
                 onChange={(event) => {
                   setMessage(event.target.value)
                   if (submitError) setSubmitError(null)

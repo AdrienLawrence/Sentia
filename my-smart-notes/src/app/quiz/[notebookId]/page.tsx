@@ -1,8 +1,15 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { LegalConsentGate } from '@/features/legal/LegalConsentGate'
+import {
+  QuizSetup,
+  type QuizDifficulty,
+  type QuizLength,
+  type QuizScope
+} from './QuizSetup'
 import styles from './Quiz.module.css'
 
 interface QuizQuestion {
@@ -18,10 +25,16 @@ interface QuizQuestion {
 
 interface Quiz {
   title: string
+  configuration: {
+    scope: QuizScope
+    length: QuizLength
+    difficulty: QuizDifficulty
+    questionCount: number
+  }
   questions: QuizQuestion[]
 }
 
-export default function QuizPage({
+function QuizPageContent({
   params
 }: {
   params: Promise<{ notebookId: string }>
@@ -35,6 +48,24 @@ export default function QuizPage({
   const [submitted, setSubmitted] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPageId, setCurrentPageId] =
+    useState<string | null>(null)
+  const [scope, setScope] = useState<QuizScope>('notebook')
+  const [length, setLength] =
+    useState<QuizLength>('medium')
+  const [difficulty, setDifficulty] =
+    useState<QuizDifficulty>('balanced')
+
+  useEffect(() => {
+    const pageId = new URLSearchParams(
+      window.location.search
+    ).get('pageId')
+
+    if (pageId) {
+      setCurrentPageId(pageId)
+      setScope('page')
+    }
+  }, [])
 
   const generateQuiz = async () => {
     setIsGenerating(true)
@@ -50,7 +81,10 @@ export default function QuizPage({
         },
         body: JSON.stringify({
           notebookId,
-          questionCount: 8
+          pageId: scope === 'page' ? currentPageId : undefined,
+          scope,
+          length,
+          difficulty
         })
       })
       const result = await response.json()
@@ -90,41 +124,45 @@ export default function QuizPage({
           className={styles.backButton}
           onClick={() => router.back()}
         >
-          ← Editor
+          ← Back
         </button>
         <div>
-          <span className={styles.eyebrow}>SCRIBEAI</span>
+          <span className={styles.eyebrow}>SENTIA</span>
           <h1>Study Quiz</h1>
         </div>
         <button
           type="button"
           className={styles.generateButton}
           disabled={isGenerating}
-          onClick={() => void generateQuiz()}
+          onClick={() => {
+            if (quiz) {
+              setQuiz(null)
+              setSubmitted(false)
+              setAnswers({})
+            } else {
+              void generateQuiz()
+            }
+          }}
         >
           {isGenerating
             ? 'Building from your notes…'
             : quiz
-              ? 'New Quiz'
+              ? 'Customize'
               : 'Generate Quiz'}
         </button>
       </header>
 
       {!quiz && !isGenerating && (
-        <section className={styles.emptyState}>
-          <span>AI STUDY MODE</span>
-          <h2>Quiz this notebook</h2>
-          <p>
-            ScribeAI retrieves relevant passages from your notebook
-            and builds eight source-grounded questions.
-          </p>
-          <button
-            type="button"
-            onClick={() => void generateQuiz()}
-          >
-            Generate eight questions
-          </button>
-        </section>
+        <QuizSetup
+          currentPageAvailable={Boolean(currentPageId)}
+          difficulty={difficulty}
+          length={length}
+          scope={scope}
+          onDifficultyChange={setDifficulty}
+          onGenerate={() => void generateQuiz()}
+          onLengthChange={setLength}
+          onScopeChange={setScope}
+        />
       )}
 
       {isGenerating && (
@@ -139,8 +177,19 @@ export default function QuizPage({
         <section className={styles.quiz}>
           <div className={styles.quizTitle}>
             <div>
-              <span>NOTEBOOK QUIZ</span>
+              <span>
+                {quiz.configuration.scope === 'page'
+                  ? 'PAGE QUIZ'
+                  : 'NOTEBOOK QUIZ'}
+              </span>
               <h2>{quiz.title}</h2>
+              <div className={styles.quizConfigSummary}>
+                <span>{quiz.configuration.length}</span>
+                <span>{quiz.configuration.difficulty}</span>
+                <span>
+                  {quiz.configuration.questionCount} questions
+                </span>
+              </div>
             </div>
             {submitted && (
               <strong>
@@ -173,6 +222,7 @@ export default function QuizPage({
                       type="button"
                       key={`${choiceIndex}-${choice}`}
                       disabled={submitted}
+                      aria-pressed={selected}
                       className={[
                         selected ? styles.selectedChoice : '',
                         isCorrect ? styles.correctChoice : '',
@@ -184,6 +234,57 @@ export default function QuizPage({
                           [questionIndex]: choiceIndex
                         }))
                       }
+                      onKeyDown={(event) => {
+                        if (
+                          ![
+                            'ArrowUp',
+                            'ArrowDown',
+                            'ArrowLeft',
+                            'ArrowRight',
+                            'Home',
+                            'End'
+                          ].includes(event.key)
+                        ) {
+                          return
+                        }
+
+                        const choices = Array.from(
+                          event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                            'button:not([disabled])'
+                          ) ?? []
+                        )
+                        const currentIndex = choices.indexOf(
+                          event.currentTarget
+                        )
+
+                        if (
+                          currentIndex === -1 ||
+                          choices.length === 0
+                        ) {
+                          return
+                        }
+
+                        event.preventDefault()
+
+                        if (event.key === 'Home') {
+                          choices[0].focus()
+                        } else if (event.key === 'End') {
+                          choices[choices.length - 1].focus()
+                        } else {
+                          const direction = [
+                            'ArrowDown',
+                            'ArrowRight'
+                          ].includes(event.key)
+                            ? 1
+                            : -1
+                          const nextIndex =
+                            (currentIndex +
+                              direction +
+                              choices.length) %
+                            choices.length
+                          choices[nextIndex].focus()
+                        }
+                      }}
                     >
                       <span>
                         {String.fromCharCode(65 + choiceIndex)}
@@ -228,5 +329,17 @@ export default function QuizPage({
         </section>
       )}
     </main>
+  )
+}
+
+export default function QuizPage({
+  params
+}: {
+  params: Promise<{ notebookId: string }>
+}) {
+  return (
+    <LegalConsentGate>
+      <QuizPageContent params={params} />
+    </LegalConsentGate>
   )
 }

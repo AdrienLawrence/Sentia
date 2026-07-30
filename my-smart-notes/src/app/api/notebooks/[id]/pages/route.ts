@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { privateConditionalJson } from '@/lib/httpCache'
 
 import {
   ApiRequestError,
@@ -15,8 +16,16 @@ import {
   requireSameOrigin,
   validateTiptapDocument
 } from '@/lib/apiSecurity'
+import {
+  claimNotebookRevision,
+  readExpectedRevision,
+  revisionResponse
+} from '@/lib/notebookRevision'
 
-// GET /api/notebooks/[id]/pages - Get all pages for a notebook
+// GET /api/notebooks/[id]/pages
+// summary: page directory only
+// content: bounded page content batch selected by IDs
+// full: complete notebook content for explicit bulk operations
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,8 +34,29 @@ export async function GET(
     const { id: notebookId } = await params
     assertUuid(notebookId, 'notebook ID')
     const user = await requireAuthenticatedUser(request)
+    const searchParams = new URL(request.url).searchParams
+    const view = searchParams.get('view') ?? 'full'
 
-    const notebook = await prisma.notebook.findFirst({
+    if (!['full', 'summary', 'content'].includes(view)) {
+      throw new ApiRequestError('Invalid page view')
+    }
+
+    const requestedIds =
+      view === 'content'
+        ? assertUuidArray(
+            (searchParams.get('ids') ?? '')
+              .split(',')
+              .filter(Boolean),
+            'page IDs',
+            8
+          )
+        : []
+
+    if (view === 'content' && requestedIds.length === 0) {
+      throw new ApiRequestError('At least one page ID is required')
+    }
+
+    const notebookPromise = prisma.notebook.findFirst({
       where: {
         id: notebookId,
         user_id: user.id
@@ -36,6 +66,58 @@ export async function GET(
       }
     })
 
+    const pagesPromise =
+      view === 'summary'
+        ? prisma.page.findMany({
+            where: {
+              notebook_id: notebookId,
+              user_id: user.id
+            },
+            orderBy: {
+              page_number: 'asc'
+            },
+            select: {
+              id: true,
+              title: true,
+              page_number: true,
+              notebook_id: true,
+              created_at: true,
+              updated_at: true
+            }
+          })
+        : prisma.page.findMany({
+            where: {
+              notebook_id: notebookId,
+              user_id: user.id,
+              ...(view === 'content'
+                ? {
+                    id: {
+                      in: requestedIds
+                    }
+                  }
+                : {})
+            },
+            orderBy: {
+              page_number: 'asc'
+            },
+            ...(view === 'content'
+              ? {
+                  include: {
+                    draw_boxes: {
+                      include: {
+                        elements: true
+                      }
+                    }
+                  }
+                }
+              : {})
+          })
+
+    const [notebook, loadedPages] = await Promise.all([
+      notebookPromise,
+      pagesPromise
+    ])
+
     if (!notebook) {
       return NextResponse.json(
         { error: 'Notebook not found' },
@@ -43,20 +125,22 @@ export async function GET(
       )
     }
 
-    const pages = await prisma.page.findMany({
-      where: {
-        notebook_id: notebookId,
-        user_id: user.id
-      },
-      orderBy: {
-        page_number: 'asc'
-      },
-      include: {
-        notebook: true
-      }
-    })
+    const pages =
+      view === 'content'
+        ? requestedIds
+            .map((pageId) =>
+              loadedPages.find(
+                (loadedPage) => loadedPage.id === pageId
+              )
+            )
+            .filter((loadedPage) => loadedPage !== undefined)
+        : loadedPages
 
-    return NextResponse.json(pages)
+    return privateConditionalJson(
+      request,
+      pages,
+      `${user.id}:notebook:${notebookId}:pages:${view}:${requestedIds.join(',')}`
+    )
   } catch (error) {
     return apiErrorResponse(error, 'Failed to fetch pages')
   }
@@ -105,8 +189,10 @@ export async function POST(
     assertAllowedKeys(body, [
       'title',
       'content',
-      'page_number'
+      'page_number',
+      'expectedRevision'
     ])
+    const expectedRevision = readExpectedRevision(body)
     readOptionalNumber(body, 'page_number', 1, 100_000)
 
     const title =
@@ -122,7 +208,13 @@ export async function POST(
             content: []
           }
 
-    const page = await prisma.$transaction(async (tx) => {
+    const { page, revision } = await prisma.$transaction(async (tx) => {
+      const revision = await claimNotebookRevision(
+        tx,
+        notebookId,
+        user.id,
+        expectedRevision
+      )
       const lastPage = await tx.page.findFirst({
         where: {
           notebook_id: notebookId,
@@ -139,7 +231,7 @@ export async function POST(
       const nextPageNumber =
         (lastPage?.page_number ?? 0) + 1
 
-      return tx.page.create({
+      const page = await tx.page.create({
         data: {
           title,
           content,
@@ -148,9 +240,11 @@ export async function POST(
           notebook_id: notebookId
         }
       })
+
+      return { page, revision }
     })
 
-    return NextResponse.json(page, { status: 201 })
+    return revisionResponse(page, revision, 201)
   } catch (error) {
     return apiErrorResponse(error, 'Failed to create page')
   }
@@ -187,8 +281,10 @@ export async function PATCH(
     const body = await parseJsonObject(request, 128_000)
     assertAllowedKeys(body, [
       'pageIds',
-      'pendingDeletionPageIds'
+      'pendingDeletionPageIds',
+      'expectedRevision'
     ])
+    const expectedRevision = readExpectedRevision(body)
     const pageIds = assertUuidArray(body.pageIds, 'pageIds')
     const pendingDeletionPageIds = assertUuidArray(
       body.pendingDeletionPageIds,
@@ -226,20 +322,31 @@ export async function PATCH(
       )
     }
 
-    await prisma.$transaction(
-      pageIds.map((pageId, index) =>
-        prisma.page.update({
-          where: {
-            id: pageId
-          },
-          data: {
-            page_number: index + 1
-          }
-        })
+    const revision = await prisma.$transaction(async (tx) => {
+      const revision = await claimNotebookRevision(
+        tx,
+        notebookId,
+        user.id,
+        expectedRevision
       )
-    )
 
-    return NextResponse.json({ success: true })
+      await Promise.all(
+        pageIds.map((pageId, index) =>
+          tx.page.update({
+            where: {
+              id: pageId
+            },
+            data: {
+              page_number: index + 1
+            }
+          })
+        )
+      )
+
+      return revision
+    })
+
+    return revisionResponse({ success: true }, revision)
   } catch (error) {
     return apiErrorResponse(error, 'Failed to reorder pages')
   }

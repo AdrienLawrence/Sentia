@@ -1,0 +1,39 @@
+name: Production database migration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    defaults:
+      run:
+        working-directory: my-smart-notes
+    env:
+      DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: my-smart-notes/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Apply committed migrations
+        run: npx prisma migrate deploy

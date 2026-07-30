@@ -1,0 +1,2 @@
+ALTER TABLE "notebooks"
+ADD COLUMN "revision" INTEGER NOT NULL DEFAULT 0;

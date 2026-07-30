@@ -14,6 +14,11 @@ export interface RetrievedChunk {
   similarity: number
 }
 
+export interface NotebookQuizStats {
+  characterCount: number
+  chunkCount: number
+}
+
 export function isRagDatabaseSetupError(error: unknown) {
   if (!error || typeof error !== 'object') return false
 
@@ -212,6 +217,85 @@ export async function retrieveNotebookContext(
       ORDER BY chunks."embedding" <=>
         CAST(${embedding} AS extensions.vector)
       LIMIT ${limit}
+    `
+  )
+}
+
+export async function getNotebookQuizStats(
+  userId: string,
+  notebookId: string,
+  pageId?: string
+) {
+  const pageFilter = pageId
+    ? Prisma.sql`AND "page_id" = ${pageId}::uuid`
+    : Prisma.empty
+  const [stats] = await prisma.$queryRaw<NotebookQuizStats[]>(
+    Prisma.sql`
+      SELECT
+        COUNT(*)::integer AS "chunkCount",
+        COALESCE(SUM(LENGTH("content")), 0)::integer AS "characterCount"
+      FROM "page_chunks"
+      WHERE "user_id" = ${userId}::uuid
+        AND "notebook_id" = ${notebookId}::uuid
+        ${pageFilter}
+    `
+  )
+
+  return stats ?? {
+    characterCount: 0,
+    chunkCount: 0
+  }
+}
+
+export async function retrieveNotebookQuizContext(
+  userId: string,
+  notebookId: string,
+  limit: number,
+  pageId?: string
+) {
+  const pageFilter = pageId
+    ? Prisma.sql`AND chunks."page_id" = ${pageId}::uuid`
+    : Prisma.empty
+
+  return prisma.$queryRaw<RetrievedChunk[]>(
+    Prisma.sql`
+      WITH bucketed AS (
+        SELECT
+          chunks."page_id" AS "pageId",
+          COALESCE(pages."title", 'Untitled Page') AS "pageTitle",
+          chunks."content",
+          pages."page_number" AS "pageNumber",
+          chunks."chunk_index" AS "chunkIndex",
+          NTILE(CAST(${limit} AS integer)) OVER (
+            ORDER BY
+              pages."page_number",
+              chunks."chunk_index",
+              chunks."id"
+          ) AS "bucket"
+        FROM "page_chunks" AS chunks
+        INNER JOIN "pages" AS pages
+          ON pages."id" = chunks."page_id"
+        WHERE chunks."user_id" = ${userId}::uuid
+          AND chunks."notebook_id" = ${notebookId}::uuid
+          ${pageFilter}
+      ),
+      sampled AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (
+            PARTITION BY "bucket"
+            ORDER BY "pageNumber", "chunkIndex", "pageId"
+          ) AS "sampleRank"
+        FROM bucketed
+      )
+      SELECT
+        "pageId",
+        "pageTitle",
+        "content",
+        1::double precision AS "similarity"
+      FROM sampled
+      WHERE "sampleRank" = 1
+      ORDER BY "bucket"
     `
   )
 }
