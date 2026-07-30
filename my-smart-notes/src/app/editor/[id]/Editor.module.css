@@ -2055,3 +2055,270 @@
   background: #c9def5;
   color: var(--sentia-light-text);
 }
+
+/* Mobile editor shell. Desktop layout remains unchanged above 768px. */
+.mobileEditorBar,
+.mobileSidebarBackdrop,
+.mobileSidebarHeader {
+  display: none;
+}
+
+@media screen and (max-width: 768px) {
+  .editorContainer {
+    position: relative;
+    height: 100dvh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding-top: calc(48px + env(safe-area-inset-top));
+  }
+
+  .mobileEditorBar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 250;
+    display: grid;
+    min-height: calc(48px + env(safe-area-inset-top));
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: end;
+    gap: 8px;
+    padding: env(safe-area-inset-top) 8px 0;
+    border-bottom: 1px solid #374151;
+    background: #111827;
+    color: #f8fafc;
+  }
+
+  .mobileEditorBar button {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  .mobileEditorBar span {
+    align-self: center;
+    overflow: hidden;
+    font: 500 15px var(--font-roboto-condensed), 'Arial Narrow', sans-serif;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobileSidebarBackdrop {
+    position: fixed;
+    inset: calc(48px + env(safe-area-inset-top)) 0 0;
+    z-index: 190;
+    display: block;
+    border: 0;
+    background: rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .mobileSidebarBackdropVisible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: calc(48px + env(safe-area-inset-top));
+    bottom: 0;
+    left: 0;
+    z-index: 200;
+    width: min(320px, 88vw);
+    box-sizing: border-box;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    box-shadow: 12px 0 28px rgba(0, 0, 0, 0.38);
+    transform: translateX(-105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform 180ms ease,
+      visibility 180ms ease;
+  }
+
+  .sidebarMobileOpen {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .mobileSidebarHeader {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    margin: -2px 0 8px;
+    color: #dbe4ee;
+    font: 500 13px var(--font-roboto-condensed), 'Arial Narrow', sans-serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .mobileSidebarHeader button {
+    width: 44px;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 24px;
+    cursor: pointer;
+  }
+
+  .sidebarContent {
+    max-height: none;
+  }
+
+  .sidebar button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .sidebar input:not([type='color']),
+  .sidebar select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .mainContent {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .documentArea,
+  .documentAreaWithAi {
+    justify-content: flex-start;
+    overflow-x: hidden;
+    padding-right: 0;
+    overscroll-behavior: contain;
+  }
+
+  .paper {
+    width: 100%;
+    min-width: 0;
+    min-height: calc(100dvh - 48px - env(safe-area-inset-top));
+    box-sizing: border-box;
+    padding: 24px 18px calc(76px + env(safe-area-inset-bottom));
+    box-shadow: none;
+  }
+
+  .titleInput {
+    margin-bottom: 12px;
+    font-size: 21px;
+  }
+
+  .paper .contentArea :global(.ProseMirror) {
+    min-height: calc(100dvh - 190px);
+    overflow-wrap: anywhere;
+  }
+
+  .navArrow {
+    position: fixed;
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 40;
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    margin: 0;
+    border: 1px solid #475569;
+    border-radius: 999px;
+    font-size: 21px;
+  }
+
+  .navArrowLeft {
+    left: 12px;
+  }
+
+  .navArrowRight {
+    right: 12px;
+  }
+
+  .aiLauncher {
+    top: calc(56px + env(safe-area-inset-top));
+    right: 8px;
+    transform: none;
+    border: 1px solid #4b5f73;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .aiPanel {
+    inset: 0;
+    z-index: 300;
+    width: 100vw;
+    height: 100dvh;
+    border-left: 0;
+  }
+
+  .aiPanelHeader {
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+
+  .aiComposer {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .aiInputRow textarea {
+    font-size: 16px;
+  }
+
+  .aiCloseButton,
+  .aiActionRow button,
+  .aiMessageActions button,
+  .aiAskButton {
+    min-height: 44px;
+  }
+
+  .fileMenu {
+    position: fixed;
+    inset: auto 12px calc(12px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+  }
+
+  .fileMenuOption {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .settingsBackdrop {
+    align-items: stretch;
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      12px
+      calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .settingsModal {
+    max-height: 100%;
+    border-radius: 8px;
+  }
+
+  .settingsModalBody {
+    max-height: calc(100dvh - 92px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 16px;
+  }
+
+  :global(html[data-app-theme='light']) .mobileEditorBar {
+    border-color: var(--sentia-light-editor-border);
+    background: var(--sentia-light-surface);
+    color: var(--sentia-light-text);
+  }
+
+  :global(html[data-app-theme='light']) .sidebar {
+    box-shadow: 12px 0 28px rgba(33, 63, 102, 0.18);
+  }
+
+  :global(html[data-app-theme='light']) .mobileSidebarBackdrop {
+    background: rgba(32, 55, 86, 0.28);
+  }
+}

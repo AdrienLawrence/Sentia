@@ -91,6 +91,7 @@ export function EditorWorkspace({
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showTutorialModal, setShowTutorialModal] = useState(false)
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const editorContainerRef = useRef<HTMLDivElement>(null)
   const notebookNameInputRef = useRef<HTMLInputElement>(null)
   const fileMenuRef = useRef<HTMLDivElement>(null)
@@ -954,6 +955,34 @@ export function EditorWorkspace({
       className={styles.editorContainer}
       data-editor-tour="editor-shell"
     >
+      <header className={styles.mobileEditorBar}>
+        <button
+          type="button"
+          aria-label="Open editor tools"
+          aria-controls="editor-sidebar"
+          aria-expanded={showMobileSidebar}
+          onClick={() => setShowMobileSidebar(true)}
+        >
+          ☰
+        </button>
+        <span title={page.title || 'Untitled Page'}>
+          {page.title || 'Untitled Page'}
+        </span>
+      </header>
+
+      <button
+        type="button"
+        className={`${styles.mobileSidebarBackdrop} ${
+          showMobileSidebar
+            ? styles.mobileSidebarBackdropVisible
+            : ''
+        }`}
+        aria-label="Close editor tools"
+        aria-hidden={!showMobileSidebar}
+        tabIndex={showMobileSidebar ? 0 : -1}
+        onClick={() => setShowMobileSidebar(false)}
+      />
+
       {isNotebookStale && (
         <div
           className={styles.staleNotebookOverlay}
@@ -994,6 +1023,7 @@ export function EditorWorkspace({
         isItalic={isItalic}
         isOrderedList={isOrderedList}
         isStrikethrough={isStrikethrough}
+        isMobileOpen={showMobileSidebar}
         mode={mode}
         notebookNameInputRef={notebookNameInputRef}
         page={page}
@@ -1015,9 +1045,13 @@ export function EditorWorkspace({
         onItalicClick={handleItalicClick}
         onListClick={handleListClick}
         onModeChange={handleModeChange}
+        onMobileClose={() => setShowMobileSidebar(false)}
         onNotebookNameBlur={handleNotebookNameBlur}
         onNotebookNameChange={handleNotebookNameChange}
-        onPageClick={(pageId) => void handlePageClick(pageId)}
+        onPageClick={(pageId) => {
+          setShowMobileSidebar(false)
+          void handlePageClick(pageId)
+        }}
         onPageDragOver={handlePageDragOver}
         onPageDragStart={handlePageDragStart}
         onPageDrop={handlePageDrop}
@@ -1108,7 +1142,10 @@ export function EditorWorkspace({
           <button
             type="button"
             className={styles.aiLauncher}
-            onClick={() => setShowAiPanel(true)}
+            onClick={() => {
+              setShowMobileSidebar(false)
+              setShowAiPanel(true)
+            }}
           >
             Ask AI
           </button>
@@ -1271,6 +1308,7 @@ export function EditorWorkspace({
         currentMode={mode}
         onModeChange={(nextMode) => setMode(nextMode)}
         onComplete={completeEditorTour}
+        onSidebarVisibilityChange={setShowMobileSidebar}
       />
     </div>
   )

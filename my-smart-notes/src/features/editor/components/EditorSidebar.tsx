@@ -25,6 +25,7 @@ interface EditorSidebarProps {
   isItalic: boolean
   isOrderedList: boolean
   isStrikethrough: boolean
+  isMobileOpen: boolean
   mode: 'read' | 'write'
   notebookNameInputRef: RefObject<HTMLInputElement | null>
   page: NotebookPage
@@ -52,6 +53,7 @@ interface EditorSidebarProps {
     event: MouseEvent<HTMLButtonElement>
   ) => void
   onModeChange: (mode: 'read' | 'write') => void
+  onMobileClose: () => void
   onNotebookNameBlur: (event: FocusEvent<HTMLInputElement>) => void
   onNotebookNameChange: (event: ChangeEvent<HTMLInputElement>) => void
   onPageClick: (pageId: string) => void
@@ -96,6 +98,7 @@ export function EditorSidebar({
   isItalic,
   isOrderedList,
   isStrikethrough,
+  isMobileOpen,
   mode,
   notebookNameInputRef,
   page,
@@ -114,6 +117,7 @@ export function EditorSidebar({
   onItalicClick,
   onListClick,
   onModeChange,
+  onMobileClose,
   onNotebookNameBlur,
   onNotebookNameChange,
   onPageClick,
@@ -132,6 +136,7 @@ export function EditorSidebar({
     if (target.closest('[role="menu"]')) return
 
     if (event.key === 'Escape') {
+      onMobileClose()
       const writingSurface =
         document.querySelector<HTMLElement>(
           '.ProseMirror[contenteditable="true"]'
@@ -179,9 +184,23 @@ export function EditorSidebar({
 
   return (
     <div
-      className={styles.sidebar}
+      id="editor-sidebar"
+      className={`${styles.sidebar} ${
+        isMobileOpen ? styles.sidebarMobileOpen : ''
+      }`}
       onKeyDownCapture={handleSidebarKeyDown}
     >
+      <div className={styles.mobileSidebarHeader}>
+        <span>Editor tools</span>
+        <button
+          type="button"
+          aria-label="Close editor tools"
+          onClick={onMobileClose}
+        >
+          ×
+        </button>
+      </div>
+
       <div className={styles.notebookNameSection}>
         <label className={styles.sidebarLabel}>Notebook</label>
         <input

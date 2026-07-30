@@ -10,6 +10,7 @@ interface EditorShowcaseTourProps {
   currentMode: EditorMode
   onModeChange: (mode: EditorMode) => void
   onComplete: () => void
+  onSidebarVisibilityChange?: (isVisible: boolean) => void
 }
 
 interface ShowcaseStep {
@@ -95,7 +96,7 @@ const SHOWCASE_STEPS: ShowcaseStep[] = [
     title: 'Navigate and reorder in Read mode',
     description:
       'Select a bulleted title to open that page. Drag a title above or below another title to change the order and it saves automatically.',
-    selector: '[data-editor-tour="read-page-list"]',
+    selector: '[data-editor-tour="page-list"]',
     mode: 'read',
     detail:
       'With focus outside editable controls, Backspace removes the selected page and Ctrl/Cmd + Z restores deleted pages newest-first.'
@@ -128,7 +129,8 @@ export function EditorShowcaseTour({
   isOpen,
   currentMode,
   onModeChange,
-  onComplete
+  onComplete,
+  onSidebarVisibilityChange
 }: EditorShowcaseTourProps) {
   const [stepIndex, setStepIndex] = useState(0)
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
@@ -147,6 +149,25 @@ export function EditorShowcaseTour({
   }, [isOpen])
 
   const step = SHOWCASE_STEPS[stepIndex]
+
+  useEffect(() => {
+    if (!onSidebarVisibilityChange) return
+
+    if (!isOpen) {
+      onSidebarVisibilityChange(false)
+      return
+    }
+
+    onSidebarVisibilityChange(
+      [
+        '[data-editor-tour="notebook-name"]',
+        '[data-editor-tour="mode-controls"]',
+        '[data-editor-tour="writing-tools"]',
+        '[data-editor-tour="page-list"]',
+        '[data-editor-tour="editor-utilities"]'
+      ].includes(step.selector ?? '')
+    )
+  }, [isOpen, onSidebarVisibilityChange, step.selector])
 
   useEffect(() => {
     if (!isOpen) return
