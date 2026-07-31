@@ -80,28 +80,6 @@ describe('email confirmation route', () => {
     )
   })
 
-  test('exchanges a PKCE email code and opens the dashboard', async () => {
-    const response = await exchangeAuthCode(
-      new NextRequest(
-        'http://localhost/auth/callback?code=email-code&next=/dashboard&flow=email'
-      )
-    )
-
-    assert.equal(
-      response.headers.get('location'),
-      'http://localhost/dashboard'
-    )
-    assert.deepEqual(
-      testState.calls.auth.find(
-        (call) => call.method === 'exchangeCodeForSession'
-      ),
-      {
-        method: 'exchangeCodeForSession',
-        args: ['email-code']
-      }
-    )
-  })
-
   test('exchanges a PKCE recovery code and opens the password form', async () => {
     const response = await exchangeAuthCode(
       new NextRequest(

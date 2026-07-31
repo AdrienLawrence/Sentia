@@ -80,10 +80,7 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email: normalizedEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard&flow=email`
-        }
+        email: normalizedEmail
       })
 
       if (error) throw error
@@ -132,10 +129,7 @@ export default function LoginPage() {
       } else {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard&flow=email`
-          }
+          password
         })
         if (error) throw error
 
