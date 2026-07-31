@@ -105,7 +105,7 @@ const SHOWCASE_STEPS: ShowcaseStep[] = [
     label: 'Utilities',
     title: 'Use FILE and SETTINGS',
     description:
-      'FILE contains Rename Notebook, Delete Notebook, and Home. SETTINGS contains appearance, commands, the full tutorial, and this replayable showcase.',
+      'FILE contains notebook import, export, sync, rename, and deletion tools. SETTINGS contains appearance, commands, the full tutorial, and this replayable showcase. HOME returns directly to the dashboard.',
     selector: '[data-editor-tour="editor-utilities"]',
     mode: 'write',
     detail:

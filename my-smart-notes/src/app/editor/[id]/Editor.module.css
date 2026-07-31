@@ -2079,7 +2079,7 @@
     z-index: 250;
     display: grid;
     min-height: calc(48px + env(safe-area-inset-top));
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: 44px minmax(0, 1fr) 52px 60px;
     align-items: end;
     gap: 8px;
     padding: env(safe-area-inset-top) 8px 0;
@@ -2107,6 +2107,21 @@
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .mobileEditorBar .mobileTopBarAction {
+    width: 100%;
+    font: 500 11px var(--font-roboto-condensed), 'Arial Narrow', sans-serif;
+    letter-spacing: 0.02em;
+  }
+
+  .mobileEditorBar .mobileTopBarDanger {
+    color: #fca5a5;
+  }
+
+  .mobileEditorBar .mobileTopBarAction:disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
   }
 
   .mobileSidebarBackdrop {
@@ -2312,6 +2327,10 @@
     border-color: var(--sentia-light-editor-border);
     background: var(--sentia-light-surface);
     color: var(--sentia-light-text);
+  }
+
+  :global(html[data-app-theme='light']) .mobileEditorBar .mobileTopBarDanger {
+    color: #9f2f3e;
   }
 
   :global(html[data-app-theme='light']) .sidebar {

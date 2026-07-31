@@ -82,7 +82,7 @@ export default function LoginPage() {
         type: 'signup',
         email: normalizedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm`
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard&flow=email`
         }
       })
 
@@ -134,7 +134,7 @@ export default function LoginPage() {
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/confirm`
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard&flow=email`
           }
         })
         if (error) throw error

@@ -322,14 +322,6 @@ export function EditorFileMenu({
                   Study Quiz
                 </button>
 
-                <button
-                  className={styles.fileMenuOption}
-                  type="button"
-                  role="menuitem"
-                  onClick={onGoHome}
-                >
-                  Home
-                </button>
               </>
             )}
           </div>
@@ -344,6 +336,14 @@ export function EditorFileMenu({
           onClick={onOpenSettings}
         >
           SETTINGS
+        </button>
+        <button
+          tabIndex={-1}
+          className={`${styles.fileOption} ${styles.sidebarUtilityButton}`}
+          type="button"
+          onClick={onGoHome}
+        >
+          HOME
         </button>
       </div>
     </div>

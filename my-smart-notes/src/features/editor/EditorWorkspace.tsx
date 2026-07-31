@@ -185,6 +185,7 @@ export function EditorWorkspace({
 
   const {
     clearPendingDeletedPages,
+    deletePageById,
     flushPendingDeletedPages,
     flushPendingDeletedPagesOnExit,
     getPendingDeletionPageIds
@@ -546,6 +547,14 @@ export function EditorWorkspace({
 
     action()
 
+    if (
+      window.matchMedia(
+        '(max-width: 768px), (pointer: coarse)'
+      ).matches
+    ) {
+      return
+    }
+
     requestAnimationFrame(() => {
       const editorElement =
         document.querySelector(
@@ -572,6 +581,19 @@ export function EditorWorkspace({
     nextMode: 'read' | 'write'
   ) => {
     setMode(nextMode)
+
+    if (
+      window.matchMedia(
+        '(max-width: 768px), (pointer: coarse)'
+      ).matches
+    ) {
+      const activeElement = document.activeElement
+
+      if (activeElement instanceof HTMLElement) {
+        activeElement.blur()
+      }
+      return
+    }
 
     requestAnimationFrame(() => {
       const editorElement =
@@ -692,6 +714,25 @@ export function EditorWorkspace({
     }
 
     router.push('/dashboard')
+  }
+
+  const handleDeleteCurrentPage = () => {
+    if (
+      !page ||
+      page.isPendingCreation ||
+      pages.length <= 1
+    ) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete "${page.title || 'Untitled Page'}"?`
+    )
+
+    if (!confirmed) return
+
+    setShowMobileSidebar(false)
+    deletePageById(page.id)
   }
 
   const handleDeleteNotebookClick = (
@@ -968,6 +1009,23 @@ export function EditorWorkspace({
         <span title={page.title || 'Untitled Page'}>
           {page.title || 'Untitled Page'}
         </span>
+        <button
+          type="button"
+          className={styles.mobileTopBarAction}
+          aria-label="Return to dashboard"
+          onClick={() => void handleHomeClick()}
+        >
+          Home
+        </button>
+        <button
+          type="button"
+          className={`${styles.mobileTopBarAction} ${styles.mobileTopBarDanger}`}
+          aria-label="Delete current page"
+          disabled={pages.length <= 1 || page.isPendingCreation}
+          onClick={handleDeleteCurrentPage}
+        >
+          Delete
+        </button>
       </header>
 
       <button

@@ -9,6 +9,20 @@ interface EditorToolbarProps {
   editor: Editor
 }
 
+function formattingChain(editor: Editor) {
+  const chain = editor.chain()
+
+  if (
+    !window.matchMedia(
+      '(max-width: 768px), (pointer: coarse)'
+    ).matches
+  ) {
+    chain.focus()
+  }
+
+  return chain
+}
+
 export function EditorToolbar({
   editor
 }: EditorToolbarProps) {
@@ -127,7 +141,7 @@ export function EditorToolbar({
     }
 
     try {
-      const chain = editor.chain().focus()
+      const chain = formattingChain(editor)
 
       if (isBold) {
         chain.setBold().run()
@@ -153,7 +167,7 @@ export function EditorToolbar({
     }
 
     try {
-      const chain = editor.chain().focus()
+      const chain = formattingChain(editor)
 
       if (isItalic) {
         chain.setItalic().run()
@@ -179,7 +193,7 @@ export function EditorToolbar({
     }
 
     try {
-      const chain = editor.chain().focus()
+      const chain = formattingChain(editor)
 
       if (isStrikethrough) {
         chain.setStrike().run()
@@ -205,9 +219,7 @@ export function EditorToolbar({
     }
 
     try {
-      editor
-        .chain()
-        .focus()
+      formattingChain(editor)
         .toggleCodeBlock()
         .run()
     } catch (error) {
@@ -227,9 +239,7 @@ export function EditorToolbar({
           textAlign: alignment
         })
       ) {
-        editor
-          .chain()
-          .focus()
+        formattingChain(editor)
           .setTextAlign(alignment)
           .run()
       }
@@ -251,9 +261,7 @@ export function EditorToolbar({
         )?.color
 
       if (currentColor !== textColor) {
-        editor
-          .chain()
-          .focus()
+        formattingChain(editor)
           .setColor(textColor)
           .run()
       }
@@ -278,9 +286,7 @@ export function EditorToolbar({
     }
 
     try {
-      editor
-        .chain()
-        .focus()
+      formattingChain(editor)
         .toggleBulletList()
         .run()
     } catch (error) {
@@ -304,9 +310,7 @@ export function EditorToolbar({
     }
 
     try {
-      editor
-        .chain()
-        .focus()
+      formattingChain(editor)
         .toggleOrderedList()
         .run()
     } catch (error) {
@@ -329,17 +333,14 @@ export function EditorToolbar({
       if (
         currentFontSize !== fontSize
       ) {
-        const chain = editor.chain()
+        const chain = formattingChain(editor)
         const savedSelection = savedSelectionRef.current
 
         if (savedSelection) {
           chain.setTextSelection(savedSelection)
         }
 
-        chain
-          .focus()
-          .setFontSize(fontSize)
-          .run()
+        chain.setFontSize(fontSize).run()
       }
     } catch (error) {
       console.error(
@@ -361,9 +362,7 @@ export function EditorToolbar({
       if (
         currentFontFamily !== fontFamily
       ) {
-        editor
-          .chain()
-          .focus()
+        formattingChain(editor)
           .setMark('textStyle', {
             fontFamily
           })
