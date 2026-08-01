@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   },
   description:
     "A focused notebook editor with grounded AI study and writing tools.",
+  icons: {
+    icon: [{ url: "/sentia-mark.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

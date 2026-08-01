@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Sentia">
+  <defs>
+    <linearGradient id="surface" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111d31"/>
+      <stop offset="1" stop-color="#070b13"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="8" y1="7" x2="24" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#66e8ff"/>
+      <stop offset="0.5" stop-color="#7db7ff"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.25" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <path d="M7 1.5h18L30.5 7v18L25 30.5H7L1.5 25V7Z" fill="url(#surface)" stroke="#243d5b"/>
+  <text
+    x="16"
+    y="23.2"
+    text-anchor="middle"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="21"
+    font-weight="600"
+    letter-spacing="-0.8"
+    fill="url(#signal)"
+    filter="url(#glow)"
+  >S</text>
+</svg>
