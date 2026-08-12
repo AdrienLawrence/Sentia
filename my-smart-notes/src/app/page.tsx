@@ -2,6 +2,26 @@
 
 import { useRouter } from 'next/navigation'
 
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Sentia',
+  url: 'https://sentia-nu.vercel.app',
+  applicationCategory: 'EducationalApplication',
+  applicationSubCategory: 'Note-taking and study software',
+  operatingSystem: 'Web',
+  isAccessibleForFree: true,
+  description:
+    'A notebook editor with AI assistance grounded in your notes, adaptive study quizzes, and Markdown import and export tools.',
+  featureList: [
+    'Rich-text notebook editor',
+    'AI assistance grounded in user notebooks',
+    'Adaptive study quiz generation',
+    'Markdown, text, and PDF import and export',
+    'Local Markdown folder synchronization'
+  ]
+}
+
 export default function HomePage() {
   const router = useRouter()
 
@@ -12,6 +32,12 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#080a0e] text-slate-100">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, '\\u003c')
+        }}
+      />
       {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0b0e13]/90 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex items-center px-6 py-4">
@@ -26,10 +52,11 @@ export default function HomePage() {
         <div className="relative mb-16 overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1117] px-6 py-16 text-center shadow-2xl shadow-black/20 sm:px-12">
           <div className="pointer-events-none absolute left-1/2 top-0 h-48 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600/10 blur-3xl" />
           <h1 className="relative mb-6 text-4xl font-semibold tracking-tight text-slate-50 sm:text-5xl">
-            Finally, a Better Way to Take Notes
+            AI-Powered Notes Built for Studying
           </h1>
           <p className="relative mb-8 mx-auto max-w-2xl text-lg text-slate-400">
-            A modern learning experience 
+            Write in a familiar notebook editor, ask questions grounded in
+            your own notes, and turn class material into adaptive quizzes.
           </p>
           
           <button
@@ -49,8 +76,8 @@ export default function HomePage() {
                 <path d="M8 8h6M8 12h4M17 7l2-2 1 1-2 2" />
               </svg>
             </div>
-            <h3 className="mb-2 font-medium text-slate-100">Professional Editor</h3>
-            <p className="text-sm leading-6 text-slate-500">Dynamic formatting options. Your notes, your way.</p>
+            <h2 className="mb-2 font-medium text-slate-100">Familiar Rich-Text Editor</h2>
+            <p className="text-sm leading-6 text-slate-500">Write and format notes without learning a complicated new workflow.</p>
           </div>
           
           <div className="rounded-xl border border-slate-800 bg-[#11151c] p-6 shadow-sm shadow-black/20 transition-all hover:-translate-y-0.5 hover:border-slate-600">
@@ -62,8 +89,8 @@ export default function HomePage() {
                 <circle cx="7" cy="17.5" r="1" fill="currentColor" stroke="none" />
               </svg>
             </div>
-            <h3 className="mb-2 font-medium text-slate-100">Stay Organized</h3>
-            <p className="text-sm leading-6 text-slate-500">No more messy docs, keep your notes in one place.</p>
+            <h2 className="mb-2 font-medium text-slate-100">Organized Notebooks</h2>
+            <p className="text-sm leading-6 text-slate-500">Keep long class notes structured across searchable notebooks and pages.</p>
           </div>
           
           <div className="rounded-xl border border-slate-800 bg-[#11151c] p-6 shadow-sm shadow-black/20 transition-all hover:-translate-y-0.5 hover:border-slate-600">
@@ -74,8 +101,8 @@ export default function HomePage() {
                 <circle cx="7" cy="17" r="2" />
               </svg>
             </div>
-            <h3 className="mb-2 font-medium text-slate-100">Fully Customizable</h3>
-            <p className="text-sm leading-6 text-slate-500">Make learning interesting. Choose styles that work for you.</p>
+            <h2 className="mb-2 font-medium text-slate-100">Grounded AI Study Tools</h2>
+            <p className="text-sm leading-6 text-slate-500">Ask questions about your notes and generate quizzes from the material you wrote.</p>
           </div>
         </div>
 

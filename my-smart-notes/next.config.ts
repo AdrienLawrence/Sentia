@@ -77,6 +77,13 @@ const securityHeaders = [
     : [])
 ];
 
+const privateRouteHeaders = [
+  {
+    key: "X-Robots-Tag",
+    value: "noindex, nofollow, noarchive"
+  }
+];
+
 const nextConfig: NextConfig = {
   images: {
     unoptimized: true
@@ -95,7 +102,20 @@ const nextConfig: NextConfig = {
             value: "no-store, max-age=0"
           }
         ]
-      }
+      },
+      ...[
+        "/api/:path*",
+        "/auth/:path*",
+        "/dashboard/:path*",
+        "/editor/:path*",
+        "/forgot-password",
+        "/login",
+        "/quiz/:path*",
+        "/reset-password"
+      ].map((source) => ({
+        source,
+        headers: privateRouteHeaders
+      }))
     ];
   }
 };

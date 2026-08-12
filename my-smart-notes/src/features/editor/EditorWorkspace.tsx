@@ -1128,9 +1128,9 @@ export function EditorWorkspace({
             localMirrorError={localMirrorError}
             localMirrorStatus={localMirrorStatus}
             onConnectLocalFolder={() => {
-              void saveCurrentEditorState().then(
-                async (saved) => {
-                  if (!saved) return
+              void connectOrSyncLocalFolder(async () => {
+                  const saved = await saveCurrentEditorState()
+                  if (!saved) return false
 
                   const allPagesLoaded =
                     await ensureAllPagesLoaded()
@@ -1138,12 +1138,11 @@ export function EditorWorkspace({
                     window.alert(
                       'Sentia could not finish loading this notebook for local sync. Please try again.'
                     )
-                    return
+                    return false
                   }
 
-                  return connectOrSyncLocalFolder()
-                }
-              )
+                  return true
+                })
             }}
             onDeleteNotebook={() => {
               setShowFileMenu(false)

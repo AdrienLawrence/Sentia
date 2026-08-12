@@ -5,7 +5,9 @@ import { LEGAL_CONTACT_EMAIL } from '@/features/legal/constants'
 
 export const metadata: Metadata = {
   title: 'Accessibility',
-  description: 'Sentia accessibility statement'
+  description:
+    'Read Sentia’s accessibility statement, current support, known limitations, and how to report an accessibility barrier.',
+  alternates: { canonical: '/accessibility' }
 }
 
 export default function AccessibilityPage() {

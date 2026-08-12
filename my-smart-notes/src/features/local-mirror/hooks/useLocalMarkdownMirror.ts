@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { NotebookPage } from '@/features/editor/model/types'
 import {
+  createConnectedMarkdownDirectory,
   forgetDirectoryHandle,
   loadDirectoryHandle,
   storeDirectoryHandle,
@@ -212,58 +213,68 @@ export function useLocalMarkdownMirror({
     settledMutationVersion
   ])
 
-  const connectOrSync = async () => {
+  const connectOrSync = async (
+    prepareForSync?: () => Promise<boolean>
+  ) => {
     if (!notebookId || !isSupported) return
 
     setError(null)
 
-    if (directory) {
-      setStatus('connecting')
-      const permission = await directory.requestPermission({
-        mode: 'readwrite'
-      })
-
-      if (permission !== 'granted') {
-        setStatus('permission-required')
-        return
-      }
-
-      queueSync(directory, true)
-      return
-    }
-
-    const approved = window.confirm(
-      'Connect this notebook to a local folder? Sentia will create, update, rename, and delete only Markdown files recorded in its .sentia.json manifest. Cloud saves remain authoritative.'
-    )
-
-    if (!approved) return
-
     try {
       setStatus('connecting')
-      const selectedDirectory = await (
-        window as DirectoryPickerWindow
-      ).showDirectoryPicker?.({
-        id: `sentia-${notebookId}`,
-        mode: 'readwrite'
-      })
+      let targetDirectory = directory
 
-      if (!selectedDirectory) {
-        setStatus('disconnected')
-        return
-      }
-
-      const permission =
-        await selectedDirectory.requestPermission({
+      if (!targetDirectory) {
+        const parentDirectory = await (
+          window as DirectoryPickerWindow
+        ).showDirectoryPicker?.({
+          id: 'sentia-local-markdown',
           mode: 'readwrite'
         })
 
-      if (permission !== 'granted') {
-        setStatus('permission-required')
+        if (!parentDirectory) {
+          setStatus('disconnected')
+          return
+        }
+
+        const parentPermission =
+          await parentDirectory.requestPermission({
+            mode: 'readwrite'
+          })
+
+        if (parentPermission !== 'granted') {
+          setStatus('permission-required')
+          return
+        }
+
+        targetDirectory =
+          await createConnectedMarkdownDirectory({
+            parentDirectory,
+            notebookId,
+            notebookName
+          })
+      } else {
+        const permission = await targetDirectory.requestPermission({
+          mode: 'readwrite'
+        })
+
+        if (permission !== 'granted') {
+          setStatus('permission-required')
+          return
+        }
+      }
+
+      if (prepareForSync && !(await prepareForSync())) {
+        setStatus(directory ? 'synced' : 'disconnected')
         return
       }
 
-      await storeDirectoryHandle(notebookId, selectedDirectory)
-      setDirectory(selectedDirectory)
+      if (!directory) {
+        await storeDirectoryHandle(notebookId, targetDirectory)
+        setDirectory(targetDirectory)
+      }
+
+      queueSync(targetDirectory, true)
     } catch (connectError) {
       if (
         connectError instanceof DOMException &&

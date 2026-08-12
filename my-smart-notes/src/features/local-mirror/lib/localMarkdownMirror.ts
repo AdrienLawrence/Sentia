@@ -20,6 +20,10 @@ interface LocalFileHandle {
 
 export interface LocalDirectoryHandle {
   name: string
+  getDirectoryHandle: (
+    name: string,
+    options?: { create?: boolean }
+  ) => Promise<LocalDirectoryHandle>
   getFileHandle: (
     name: string,
     options?: { create?: boolean }
@@ -305,6 +309,57 @@ async function readManifest(
 
     throw new Error('The local folder manifest could not be read.')
   }
+}
+
+export async function createConnectedMarkdownDirectory({
+  parentDirectory,
+  notebookId,
+  notebookName
+}: {
+  parentDirectory: LocalDirectoryHandle
+  notebookId: string
+  notebookName: string
+}) {
+  const safeNotebookName = safeMarkdownName(
+    notebookName || 'My Notebook'
+  )
+  const baseName = `Sentia - ${safeNotebookName}`
+
+  for (let suffix = 1; suffix <= 99; suffix += 1) {
+    const directoryName =
+      suffix === 1 ? baseName : `${baseName} (${suffix})`
+
+    try {
+      const existingDirectory =
+        await parentDirectory.getDirectoryHandle(directoryName)
+
+      try {
+        const manifest = await readManifest(existingDirectory)
+        if (manifest?.notebookId === notebookId) {
+          return existingDirectory
+        }
+      } catch {
+        // Treat unreadable or invalid existing folders as occupied.
+      }
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === 'TypeMismatchError'
+      ) {
+        continue
+      }
+
+      if (!isMissingFileError(error)) throw error
+
+      return parentDirectory.getDirectoryHandle(directoryName, {
+        create: true
+      })
+    }
+  }
+
+  throw new Error(
+    `Sentia could not create a dedicated folder for "${safeNotebookName}".`
+  )
 }
 
 async function chooseAvailableFileName(
