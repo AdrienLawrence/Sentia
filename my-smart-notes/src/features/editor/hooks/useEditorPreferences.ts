@@ -15,7 +15,7 @@ export function useEditorPreferences(
   userId: string | undefined,
   activeFontSize: string
 ) {
-  const [darkEditorPaper, setDarkEditorPaper] = useState(false)
+  const [darkEditorPaper, setDarkEditorPaper] = useState(true)
   const [showEditorTour, setShowEditorTour] = useState(true)
   const [fontSizeInput, setFontSizeInput] = useState('16')
   const [isFontSizeInputFocused, setIsFontSizeInputFocused] =

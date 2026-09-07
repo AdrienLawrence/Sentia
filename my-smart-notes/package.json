@@ -2,6 +2,9 @@
   "name": "my-smart-notes",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -16,19 +19,22 @@
   },
   "dependencies": {
     "@floating-ui/dom": "1.8.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@prisma/client": "6.19.3",
+    "@sentry/nextjs": "^10.73.0",
     "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.58.0",
-    "@tiptap/extension-color": "^3.13.0",
-    "@tiptap/extension-text-align": "^3.13.0",
-    "@tiptap/extension-text-style": "^3.13.0",
-    "@tiptap/react": "^3.6.2",
-    "@tiptap/starter-kit": "^3.6.2",
+    "@supabase/supabase-js": "^2.114.0",
+    "@tiptap/extension-color": "^3.31.3",
+    "@tiptap/extension-text-align": "^3.31.3",
+    "@tiptap/extension-text-style": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "jspdf": "^4.2.1",
     "next": "15.5.21",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.2.108",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "zod": "^4.5.4",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
@@ -44,7 +50,9 @@
     "typescript": "^5"
   },
   "overrides": {
-    "postcss": "8.5.10",
+    "dompurify": "3.4.15",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.28",
     "sharp": "0.35.0"
   }
 }

@@ -118,7 +118,7 @@ function DashboardPageContent() {
     useState('My Notebook')
   const [listView, setListView] = useState(false)
   const [darkEditorPaper, setDarkEditorPaper] =
-    useState(false)
+    useState(true)
   const [notebookSearch, setNotebookSearch] = useState('')
   const [isImporting, setIsImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(

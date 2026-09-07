@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { Prisma } from '@prisma/client'
 import { createHash } from 'node:crypto'
 
@@ -673,6 +674,11 @@ export function apiErrorResponse(
     error instanceof Error ? error.name : 'UnknownError'
   )
 
+  Sentry.captureException(error, {
+    tags: { component: 'api' },
+    extra: { operation: fallbackMessage }
+  })
+
   return NextResponse.json(
     { error: fallbackMessage },
     { status: 500 }
@@ -745,6 +751,13 @@ async function enforceRateLimit(request: Request, userId: string) {
   ) {
     await enforceDailyAiLimit(userId, route)
   }
+}
+
+export async function enforceAuthenticatedRateLimit(
+  request: Request,
+  userId: string
+) {
+  await enforceRateLimit(request, userId)
 }
 
 function enforceReadRateLimit(
@@ -857,6 +870,10 @@ async function enforceDailyAiLimit(
 }
 
 function getRateLimit(method: string, route: string) {
+  if (method === 'POST' && route === '/api/mcp') {
+    return { limit: 120, windowSeconds: 60 }
+  }
+
   if (method === 'POST' && route.startsWith('/api/ai/')) {
     return { limit: 20, windowSeconds: 60 }
   }

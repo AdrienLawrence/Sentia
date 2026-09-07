@@ -63,10 +63,50 @@ function textNode(text: string): JSONContent {
   }
 }
 
+const INLINE_MARKDOWN_PATTERN =
+  /(\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\*[^*\n]+\*)/g
+
+function inlineMarkdownNodes(text: string): JSONContent[] {
+  const nodes: JSONContent[] = []
+  let cursor = 0
+
+  for (const match of text.matchAll(INLINE_MARKDOWN_PATTERN)) {
+    const index = match.index ?? 0
+    const value = match[0]
+
+    if (index > cursor) {
+      nodes.push(textNode(text.slice(cursor, index)))
+    }
+
+    const markType = value.startsWith('**')
+      ? 'bold'
+      : value.startsWith('~~')
+        ? 'strike'
+        : value.startsWith('`')
+          ? 'code'
+          : 'italic'
+    const delimiterLength =
+      markType === 'bold' || markType === 'strike' ? 2 : 1
+
+    nodes.push({
+      type: 'text',
+      text: value.slice(delimiterLength, -delimiterLength),
+      marks: [{ type: markType }]
+    })
+    cursor = index + value.length
+  }
+
+  if (cursor < text.length) {
+    nodes.push(textNode(text.slice(cursor)))
+  }
+
+  return nodes
+}
+
 function paragraph(text = ''): JSONContent {
   return {
     type: 'paragraph',
-    ...(text ? { content: [textNode(text)] } : {})
+    ...(text ? { content: inlineMarkdownNodes(text) } : {})
   }
 }
 
@@ -136,7 +176,7 @@ export function markdownToTiptapDocument(
       content.push({
         type: 'heading',
         attrs: { level: heading[1].length },
-        content: [textNode(heading[2].trim())]
+        content: inlineMarkdownNodes(heading[2].trim())
       })
       lineIndex += 1
       continue

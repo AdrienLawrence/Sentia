@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 
 import { useDialogKeyboard } from '@/lib/accessibility/useDialogKeyboard'
 import { LEGAL_DOCUMENT_OPEN_EVENT } from '@/features/legal/constants'
+import { McpIntegrationSettings } from '@/features/integrations/components/McpIntegrationSettings'
 
 interface DashboardSettingsModalProps {
   accountProvider: string
@@ -337,6 +338,8 @@ export function DashboardSettingsModal({
               </button>
             </div>
           </section>
+
+          <McpIntegrationSettings />
 
           <section className="py-5">
             <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">

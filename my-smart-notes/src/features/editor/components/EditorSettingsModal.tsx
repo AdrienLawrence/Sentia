@@ -2,6 +2,7 @@ import { useRef } from 'react'
 
 import styles from '@/app/editor/[id]/Editor.module.css'
 import { LEGAL_DOCUMENT_OPEN_EVENT } from '@/features/legal/constants'
+import { McpIntegrationSettings } from '@/features/integrations/components/McpIntegrationSettings'
 import { useDialogKeyboard } from '@/lib/accessibility/useDialogKeyboard'
 
 interface EditorSettingsModalProps {
@@ -327,6 +328,8 @@ export function EditorSettingsModal({
               View Privacy &amp; Terms
             </button>
           </section>
+
+          <McpIntegrationSettings className={styles.settingsSection} />
 
           <section className={styles.settingsSection}>
             <h3 className={styles.settingsSectionTitle}>Saving</h3>

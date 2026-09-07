@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const isProduction = process.env.NODE_ENV === "production";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 const supabaseConnectSources = (() => {
   if (!supabaseUrl) return [];
@@ -16,6 +18,16 @@ const supabaseConnectSources = (() => {
   }
 })();
 
+const sentryConnectSources = (() => {
+  if (!sentryDsn) return [];
+
+  try {
+    return [new URL(sentryDsn).origin];
+  } catch {
+    throw new Error("NEXT_PUBLIC_SENTRY_DSN must be a valid URL");
+  }
+})();
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
@@ -23,7 +35,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ${supabaseConnectSources.join(" ")}${isProduction ? "" : " http://localhost:* ws://localhost:*"}`.trim(),
+  `connect-src 'self' ${[...supabaseConnectSources, ...sentryConnectSources].join(" ")}${isProduction ? "" : " http://localhost:* ws://localhost:*"}`.trim(),
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -120,4 +132,19 @@ const nextConfig: NextConfig = {
   }
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true
+  },
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true
+  }
+});

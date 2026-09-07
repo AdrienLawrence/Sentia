@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 import {
   LEGAL_CONSENT_SESSION_KEY,
   LEGAL_DOCUMENT_OPEN_EVENT
 } from './constants'
+import { legalAcceptancePath } from './navigation'
 
 const LegalDocumentsModal = dynamic(() =>
   import('./LegalDocumentsModal').then(
@@ -15,26 +15,23 @@ const LegalDocumentsModal = dynamic(() =>
   )
 )
 
-const PROTECTED_PATH_PREFIXES = ['/dashboard', '/editor', '/quiz']
+type ConsentState = 'checking' | 'accepted' | 'error'
 
 export function LegalConsentGate({
   children
 }: {
   children: React.ReactNode
 }) {
-  const pathname = usePathname()
-  const [isOpen, setIsOpen] = useState(false)
-  const [isRequired, setIsRequired] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [consentState, setConsentState] =
+    useState<ConsentState>('checking')
+  const [isDocumentsOpen, setIsDocumentsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const verifiedPathRef = useRef<string | null>(null)
-  const currentUserIdRef = useRef<string | null>(null)
+  const [verificationAttempt, setVerificationAttempt] = useState(0)
 
   useEffect(() => {
     const handleOpenRequest = () => {
       setError(null)
-      setIsRequired(false)
-      setIsOpen(true)
+      setIsDocumentsOpen(true)
     }
 
     window.addEventListener(
@@ -51,37 +48,36 @@ export function LegalConsentGate({
   }, [])
 
   useEffect(() => {
-    if (
-      !PROTECTED_PATH_PREFIXES.some((prefix) =>
-        pathname.startsWith(prefix)
-      )
-    ) {
-      setIsOpen(false)
-      setIsRequired(false)
-      return
-    }
-
-    if (verifiedPathRef.current === pathname) return
-    verifiedPathRef.current = pathname
+    let active = true
 
     const verifyConsent = async () => {
-      try {
-        if (
-          sessionStorage.getItem(
-            LEGAL_CONSENT_SESSION_KEY
-          ) ===
-          'accepted'
-        ) {
-          return
-        }
+      setConsentState('checking')
+      setError(null)
 
+      if (
+        sessionStorage.getItem(LEGAL_CONSENT_SESSION_KEY) ===
+        'accepted'
+      ) {
+        setConsentState('accepted')
+        return
+      }
+
+      try {
         const response = await fetch('/api/legal-consent', {
           method: 'GET',
           cache: 'no-store'
         })
         const result = await response.json()
 
-        if (response.status === 401) return
+        if (!active) return
+
+        if (response.status === 401) {
+          const currentPath = `${window.location.pathname}${window.location.search}`
+          window.location.replace(
+            `/login?next=${encodeURIComponent(currentPath)}`
+          )
+          return
+        }
 
         if (!response.ok) {
           throw new Error(
@@ -89,88 +85,77 @@ export function LegalConsentGate({
           )
         }
 
-        currentUserIdRef.current =
-          typeof result.userId === 'string'
-            ? result.userId
-            : null
-
-        if (result.accepted) {
-          sessionStorage.setItem(
-            LEGAL_CONSENT_SESSION_KEY,
-            'accepted'
-          )
-        } else {
-          setIsRequired(true)
-          setIsOpen(true)
+        if (!result.accepted) {
+          const currentPath = `${window.location.pathname}${window.location.search}`
+          window.location.replace(legalAcceptancePath(currentPath))
+          return
         }
+
+        sessionStorage.setItem(
+          LEGAL_CONSENT_SESSION_KEY,
+          'accepted'
+        )
+        setConsentState('accepted')
       } catch (consentError) {
+        if (!active) return
         setError(
           consentError instanceof Error
             ? consentError.message
             : 'Could not verify legal acceptance.'
         )
-        setIsRequired(true)
-        setIsOpen(true)
+        setConsentState('error')
       }
     }
 
     void verifyConsent()
-  }, [pathname])
 
-  const acceptDocuments = async () => {
-    setIsSubmitting(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/legal-consent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          privacyAccepted: true,
-          termsAccepted: true
-        })
-      })
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || 'Could not save legal acceptance.'
-        )
-      }
-
-      if (currentUserIdRef.current) {
-        sessionStorage.setItem(
-          LEGAL_CONSENT_SESSION_KEY,
-          'accepted'
-        )
-      }
-      setIsRequired(false)
-      setIsOpen(false)
-    } catch (consentError) {
-      setError(
-        consentError instanceof Error
-          ? consentError.message
-          : 'Could not save legal acceptance.'
-      )
-    } finally {
-      setIsSubmitting(false)
+    return () => {
+      active = false
     }
+  }, [verificationAttempt])
+
+  if (consentState !== 'accepted') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#080a0e] px-6 text-slate-100">
+        <section className="w-full max-w-md rounded-lg border border-slate-700 bg-[#11151c] p-6">
+          {consentState === 'error' ? (
+            <>
+              <h1 className="text-xl font-semibold">
+                Sentia could not verify your account
+              </h1>
+              <p role="alert" className="mt-3 text-sm leading-6 text-slate-400">
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setVerificationAttempt((attempt) => attempt + 1)
+                }
+                className="mt-5 rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:bg-slate-700"
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            <p role="status" className="text-sm text-slate-400">
+              Verifying your Sentia account…
+            </p>
+          )}
+        </section>
+      </main>
+    )
   }
 
   return (
     <>
       {children}
       <LegalDocumentsModal
-        error={error}
-        isOpen={isOpen}
-        isRequired={isRequired}
-        isSubmitting={isSubmitting}
-        onAccept={() => void acceptDocuments()}
-        onClose={() => {
-          if (!isRequired && !isSubmitting) setIsOpen(false)
-        }}
+        error={null}
+        isOpen={isDocumentsOpen}
+        isRequired={false}
+        isSubmitting={false}
+        onAccept={() => undefined}
+        onClose={() => setIsDocumentsOpen(false)}
       />
     </>
   )

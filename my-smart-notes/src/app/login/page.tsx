@@ -19,12 +19,22 @@ export default function LoginPage() {
   const [resendLoading, setResendLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [nextPath, setNextPath] = useState('/dashboard')
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
     sessionStorage.removeItem(LEGAL_CONSENT_SESSION_KEY)
     const searchParams = new URLSearchParams(window.location.search)
+    const requestedPath = searchParams.get('next')
+
+    if (
+      requestedPath?.startsWith('/') &&
+      !requestedPath.startsWith('//') &&
+      !requestedPath.includes('\\')
+    ) {
+      setNextPath(requestedPath)
+    }
 
     if (searchParams.get('oauth') === 'failed') {
       setError('Google sign-in could not be completed. Please try again.')
@@ -46,7 +56,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
           queryParams: {
             prompt: 'select_account'
           }
@@ -141,7 +151,7 @@ export default function LoginPage() {
         }
       }
       
-      router.push('/dashboard')
+      router.push(nextPath)
     } catch (error: unknown) {
       setError(
         error instanceof Error

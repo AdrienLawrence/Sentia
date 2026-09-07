@@ -19,6 +19,7 @@ interface LegalDocumentsModalProps {
   isSubmitting: boolean
   onAccept: () => void
   onClose: () => void
+  presentation?: 'modal' | 'page'
 }
 
 export function LegalDocumentsModal({
@@ -27,7 +28,8 @@ export function LegalDocumentsModal({
   isRequired,
   isSubmitting,
   onAccept,
-  onClose
+  onClose,
+  presentation = 'modal'
 }: LegalDocumentsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const documentScrollRef = useRef<HTMLDivElement>(null)
@@ -106,10 +108,15 @@ export function LegalDocumentsModal({
 
   return (
     <div
-      role="presentation"
-      className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
+      role={presentation === 'modal' ? 'presentation' : undefined}
+      className={
+        presentation === 'modal'
+          ? 'fixed inset-0 z-[1500] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6'
+          : 'flex min-h-screen items-center justify-center bg-[#080a0e] p-3 sm:p-6'
+      }
       onMouseDown={(event) => {
         if (
+          presentation === 'modal' &&
           event.target === event.currentTarget &&
           !isRequired &&
           !isSubmitting
@@ -120,8 +127,8 @@ export function LegalDocumentsModal({
     >
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        role={presentation === 'modal' ? 'dialog' : 'main'}
+        aria-modal={presentation === 'modal' ? true : undefined}
         aria-labelledby="legal-documents-title"
         aria-describedby={
           isRequired ? 'legal-consent-description' : undefined
