@@ -9,8 +9,18 @@ import { tiptapDocumentToMarkdown } from '@/features/file-transfer/lib/markdown'
 import { ApiRequestError, validateTiptapDocument } from '@/lib/apiSecurity'
 import { claimNotebookRevision } from '@/lib/notebookRevision'
 import { prisma } from '@/lib/prisma'
+import { createNotebook } from '@/lib/createNotebook'
 
 const MAX_MCP_MARKDOWN_LENGTH = 50_000
+
+const createNotebookInput = z.object({
+  title: z.string().trim().min(1).max(100)
+    .regex(
+      /^[^\u0000-\u001f\u007f]*$/,
+      'Title must not contain control characters'
+    ),
+  requestId: z.string().uuid().transform((value) => value.toLowerCase())
+}).strict()
 
 function principalUserId(authInfo?: AuthInfo) {
   const userId = authInfo?.extra?.userId
@@ -101,6 +111,43 @@ export function createSentiaMcpServer(authInfo?: AuthInfo) {
         })
 
         return result(notebooks)
+      } catch (error) {
+        return toolError(error)
+      }
+    }
+  )
+
+  server.registerTool(
+    'create_notebook',
+    {
+      title: 'Create a Sentia notebook',
+      description:
+        'Create one empty notebook owned by the connected user. Supply a fresh UUID requestId for each intended notebook and reuse it after an uncertain response. Returns its ID, name, and revision for create_page.',
+      inputSchema: createNotebookInput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    async ({ title, requestId }) => {
+      try {
+        const created = await createNotebook({
+          userId,
+          name: title,
+          style: 'blank',
+          createInitialPage: false,
+          mcpRequestId: requestId
+        })
+        return result({
+          notebook: {
+            id: created.notebook.id,
+            name: created.notebook.name,
+            revision: created.notebook.revision
+          },
+          created: created.created
+        })
       } catch (error) {
         return toolError(error)
       }

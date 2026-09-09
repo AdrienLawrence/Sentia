@@ -31,11 +31,11 @@ behavior is probabilistic, network-dependent, and billable.
 
 As of July 29, 2026:
 
-- 79 tests pass.
+- 98 tests pass across 22 suites.
 - 17 suites pass.
-- Covered modules report 86.96% line coverage.
-- Covered modules report 69.21% branch coverage.
-- Covered modules report 90.81% function coverage.
+- Covered modules report 84.11% line coverage.
+- Covered modules report 69.97% branch coverage.
+- Covered modules report 87.55% function coverage.
 - Enforced minimums are 80% lines, 60% branches, and 80% functions.
 
 These are scoped backend figures for modules loaded by the automated

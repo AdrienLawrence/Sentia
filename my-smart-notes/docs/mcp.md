@@ -9,6 +9,7 @@ https://sentia-nu.vercel.app/api/mcp
 The first supported client is Codex. The server deliberately exposes only:
 
 - `list_notebooks`
+- `create_notebook`
 - `list_pages`
 - `read_page`
 - `create_page`
@@ -50,6 +51,13 @@ consent implications have been reviewed.
 - Whole-page replacement is explicitly marked destructive, remains bounded,
   and requires the latest revision so it cannot silently overwrite newer work.
 - Existing account legal acceptance remains required.
+
+`create_notebook` accepts a title and a fresh UUID request ID. Clients reuse
+that ID only when retrying an uncertain response. Sentia retains an
+account-scoped idempotency record, so a retry returns the original notebook and
+cannot recreate it after deletion. Notebook creation is limited to 20 per UTC
+hour through MCP and 200 retained notebooks per account. The web and MCP paths
+share the same transactional account-cap enforcement.
 
 ## Maintenance mode
 

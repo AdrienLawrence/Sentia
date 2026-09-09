@@ -22,7 +22,7 @@ import {
   sanitizeSentryTransaction
 } from '../src/lib/monitoring/sentryPrivacy.ts'
 import { resetTestState, testState } from './mocks/state.ts'
-import { USER_ID } from './helpers.ts'
+import { NOTEBOOK_ID, USER_ID } from './helpers.ts'
 
 const originalEnvironment = {
   allowedClients: process.env.SENTIA_MCP_ALLOWED_CLIENT_IDS,
@@ -199,12 +199,89 @@ describe('Sentia MCP authentication and protocol', () => {
         payload.result?.tools?.map((tool) => tool.name),
         [
           'list_notebooks',
+          'create_notebook',
           'list_pages',
           'read_page',
           'create_page',
           'append_to_page',
           'update_page'
         ]
+      )
+    } finally {
+      globalThis.fetch = previousFetch
+    }
+  })
+
+  test('creates a notebook through MCP with durable retry protection', async () => {
+    const previousFetch = globalThis.fetch
+    const requestId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    let record: null | {
+      input_hash: string
+      resource_id: string
+    } = null
+    let notebook: null | {
+      id: string
+      name: string
+      revision: number
+      user_id: string
+    } = null
+    globalThis.fetch = async () => Response.json({ id: USER_ID })
+    testState.prisma['mcpIdempotencyRecord.findUnique'] = () => record
+    testState.prisma['mcpIdempotencyRecord.create'] = ({ data }) => {
+      record = data
+      return data
+    }
+    testState.prisma['notebook.count'] = () => 0
+    testState.prisma['apiRateLimit.findUnique'] = () => null
+    testState.prisma['apiRateLimit.upsert'] = () => ({})
+    testState.prisma['notebook.create'] = ({ data }) => {
+      notebook = {
+        id: NOTEBOOK_ID,
+        name: data.name,
+        revision: data.revision,
+        user_id: data.user_id
+      }
+      return notebook
+    }
+    testState.prisma['notebook.findFirst'] = () => notebook
+
+    const call = () => mcpPost(authenticatedRequest({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'create_notebook',
+        arguments: { title: 'History', requestId }
+      }
+    }))
+
+    try {
+      const first = await mcpPayload(await call()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const replay = await mcpPayload(await call()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      assert.equal(JSON.parse(first.result.content[0].text).created, true)
+      assert.equal(JSON.parse(replay.result.content[0].text).created, false)
+      assert.equal(
+        testState.calls.prisma.filter(
+          (entry) => entry.method === 'notebook.create'
+        ).length,
+        1
+      )
+
+      notebook = null
+      const deletedReplay = await mcpPayload(await call()) as {
+        result: { isError?: boolean; content: Array<{ text: string }> }
+      }
+      assert.equal(deletedReplay.result.isError, true)
+      assert.match(deletedReplay.result.content[0].text, /was deleted/)
+      assert.equal(
+        testState.calls.prisma.filter(
+          (entry) => entry.method === 'notebook.create'
+        ).length,
+        1
       )
     } finally {
       globalThis.fetch = previousFetch

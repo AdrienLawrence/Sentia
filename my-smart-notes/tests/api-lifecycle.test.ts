@@ -80,8 +80,15 @@ describe('notebook lifecycle routes', () => {
     assert.deepEqual(createData, {
       name: 'My Notebook',
       style: 'blank',
-      user_id: USER_ID
+      user_id: USER_ID,
+      revision: 0
     })
+    assert.deepEqual(
+      testState.calls.prisma.find(
+        (call) => call.method === '$transaction'
+      )?.args[1],
+      { isolationLevel: 'Serializable' }
+    )
   })
 
   test('creates a notebook and initial page atomically when requested', async () => {

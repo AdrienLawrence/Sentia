@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { privateConditionalJson } from '@/lib/httpCache'
+import { createNotebook, type NotebookStyle } from '@/lib/createNotebook'
 
 import {
-  ApiRequestError,
   apiErrorResponse,
   assertAllowedKeys,
   parseJsonObject,
@@ -84,14 +84,6 @@ export async function POST(request: NextRequest) {
     const createInitialPage =
       readOptionalBoolean(body, 'createInitialPage') ?? false
 
-    const notebookCount = await prisma.notebook.count({
-      where: { user_id: user.id }
-    })
-
-    if (notebookCount >= 200) {
-      throw new ApiRequestError('Notebook limit reached', 409)
-    }
-
     await prisma.user.upsert({
       where: {
         id: user.id
@@ -105,37 +97,19 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    const created = await createNotebook({
+      userId: user.id,
+      name,
+      style: style as NotebookStyle,
+      createInitialPage
+    })
+
     if (createInitialPage) {
-      const created = await prisma.$transaction(async (tx) => {
-        const notebook = await tx.notebook.create({
-          data: {
-            name,
-            style,
-            user_id: user.id,
-            revision: 1
-          }
-        })
-        const page = await tx.page.create({
-          data: {
-            title: 'Untitled Page',
-            content: {
-              type: 'doc',
-              content: []
-            },
-            page_number: 1,
-            user_id: user.id,
-            notebook_id: notebook.id
-          }
-        })
-
-        return { notebook, page }
-      })
-
       return NextResponse.json(
         {
           ...created.notebook,
-          latestPageId: created.page.id,
-          initialPageId: created.page.id,
+          latestPageId: created.initialPageId,
+          initialPageId: created.initialPageId,
           _count: {
             pages: 1
           }
@@ -144,15 +118,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const notebook = await prisma.notebook.create({
-      data: {
-        name,
-        style,
-        user_id: user.id
-      }
-    })
-
-    return NextResponse.json(notebook, { status: 201 })
+    return NextResponse.json(created.notebook, { status: 201 })
   } catch (error) {
     return apiErrorResponse(error, 'Failed to create notebook')
   }

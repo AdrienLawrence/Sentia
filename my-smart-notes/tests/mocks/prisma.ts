@@ -71,11 +71,11 @@ export const prisma = new Proxy(
       }
 
       if (property === '$transaction') {
-        return async (operation: any) => {
+        return async (operation: any, options?: any) => {
           invokeMock(
             'prisma',
             '$transaction',
-            [operation],
+            [operation, options],
             () => undefined
           )
 
