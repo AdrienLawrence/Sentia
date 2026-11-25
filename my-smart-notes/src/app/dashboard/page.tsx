@@ -3,8 +3,7 @@
 import {
   useEffect,
   useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent
+  useState
 } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -20,6 +19,7 @@ import {
   NOTEBOOK_VIEW_KEY,
   PENDING_NOTEBOOK_DELETION_KEY
 } from '@/features/dashboard/constants'
+import { handleMenuKeyboardNavigation } from '@/features/dashboard/lib/handleMenuKeyboardNavigation'
 import { formatNotebookDate } from '@/features/dashboard/lib/formatNotebookDate'
 import {
   clearNotebookSessionCache,
@@ -50,47 +50,6 @@ import {
 import { clearStoredDirectoryHandles } from '@/features/local-mirror/lib/localMarkdownMirror'
 
 type Notebook = DashboardNotebook
-
-function handleMenuKeyboardNavigation(
-  event: ReactKeyboardEvent<HTMLDivElement>,
-  onEscape: () => void
-) {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    onEscape()
-    return
-  }
-
-  if (
-    !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)
-  ) {
-    return
-  }
-
-  const items = Array.from(
-    event.currentTarget.querySelectorAll<HTMLElement>(
-      '[role="menuitem"]:not([disabled])'
-    )
-  ).filter((item) => item.offsetParent !== null)
-  const currentIndex = items.indexOf(
-    event.target as HTMLElement
-  )
-
-  if (currentIndex === -1 || items.length === 0) return
-
-  event.preventDefault()
-
-  if (event.key === 'Home') {
-    items[0].focus()
-  } else if (event.key === 'End') {
-    items[items.length - 1].focus()
-  } else {
-    const direction = event.key === 'ArrowDown' ? 1 : -1
-    const nextIndex =
-      (currentIndex + direction + items.length) % items.length
-    items[nextIndex].focus()
-  }
-}
 
 function DashboardPageContent() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
